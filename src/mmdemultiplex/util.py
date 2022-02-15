@@ -59,7 +59,6 @@ class TemporaryToPermanent:
         self.tmp_directory = tempfile.TemporaryDirectory(dir=permanent_file.parent)
         self.tmp_path = Path(self.tmp_directory.name)
         self.temp_file = self.tmp_path / self.permanent_file.relative_to(self.permanent_file.root)
-        self.temp_file.parent.mkdir(exist_ok=True, parents=True)
 
     def __enter__(self):
         return self
@@ -72,6 +71,7 @@ class TemporaryToPermanent:
             self.tmp_directory.cleanup()
 
     def open(self, *args, **kwargs):
+        self.temp_file.parent.mkdir(exist_ok=True, parents=True)
         self.file_handle = self.temp_file.open(*args, **kwargs)
         return self
 
