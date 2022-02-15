@@ -200,9 +200,9 @@ class MockBlockedFileAdapter:
     def __init__(self, filename, *args):
         self.filename = filename
         if "_R2_" in self.filename:
-            self.file_content = io.StringIO(R2)
+            self.file_content = io.BytesIO(R2.encode())
         else:
-            self.file_content = io.StringIO(R1)
+            self.file_content = io.BytesIO(R1.encode())
         self.file_iterator = None
 
     def iterator(self):
@@ -220,9 +220,6 @@ class MockBlockedFileAdapter:
 class DummySample:
     def __init__(self, name):
         self.name = name
-
-    def prepare_input(self):
-        return "No Job"
 
     def get_aligner_input_filenames(self):
         return self.filenames

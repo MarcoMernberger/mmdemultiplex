@@ -20,6 +20,9 @@ __license__ = "mit"
 
 
 def test_adapter_init():
+    adapter = Adapter("")
+    assert adapter.locate.__name__ == "locate_null"
+    assert not hasattr(adapter, "adapter")
     "TCA_CTGGCA_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     adapter_sequence = "CTGGCA"
     adapter = Adapter(adapter_sequence)
@@ -365,9 +368,19 @@ def test_locate():
     test = "TTT_ADAPRRR_TTT"
     assert not adapter.locate(test)
     adapter = Adapter(adapter_sequence, index_adapter_end=True, maximal_number_of_errors=1)
+    print(adapter.adapter_sequence, adapter.adapter_sequence_length)
+    assert hasattr(adapter, "adapter")
     test = "ADAPTER_TTT"
     assert adapter.locate(test) == 7
     test = "TTT_ADAPTRR_TTT"
     assert adapter.locate(test) == 11
     test = "TTT_ADAPRRR_TTT"
     assert not adapter.locate(test)
+
+
+def test_locate_0():
+    adapter_sequence = ""
+    adapter = Adapter(adapter_sequence)
+    test = "ADAPTER_TTT"
+    assert adapter.locate(test) == 0
+    assert adapter.locate.__name__ == "locate_null"

@@ -44,11 +44,11 @@ def test_init(tmp_path, pe_sample, se_sample):
     assert hasattr(demultiplexer, "barcode_df")
     assert isinstance(demultiplexer.barcode_df, pd.DataFrame)
     assert demultiplexer.library_name == pe_sample.name
-    assert demultiplexer.output_folder == tmp_path
+    assert demultiplexer.output_folder == tmp_path / demultiplexer.name
     assert demultiplexer.output_folder.exists()
     assert demultiplexer.input_sample == pe_sample
     assert demultiplexer.maximal_error_rate == 0
-    assert demultiplexer.input_files[0] == pe_sample.get_aligner_input_filenames()
+    assert demultiplexer.input_files == pe_sample.get_aligner_input_filenames()
     assert issubclass(demultiplexer.strategy, DemultiplexStrategy)
     assert demultiplexer.is_paired
     assert hasattr(demultiplexer, "decision_callbacks")
@@ -75,7 +75,7 @@ def test_get_dependencies(tmp_path, pe_sample):
 
 def test_parameters(tmp_path, pe_sample):
     demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
-    parameters = demultiplexer.parameters()
+    parameters = demultiplexer.parameters
     assert parameters[0] == demultiplexer.name
     assert parameters[1] == pe_sample.name
     assert parameters[2] == "PE_Decide_On_Start_Trim_Start_End"
@@ -128,7 +128,8 @@ def test_do_demultiplex_pe(tmp_path, pe_sample):
     with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
         demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
         demultiplexer.decision_callbacks = {"first_read": MockDecisionCallback()}
-        demultiplexer.do_demultiplex()
+        job = demultiplexer.do_demultiplex()
+        print(job.dependencies)
         ppg.run_pipegraph()
         sentinel = demultiplexer.output_folder / "done.txt"
         filepaths = [sentinel] + [
@@ -140,10 +141,42 @@ def test_do_demultiplex_pe(tmp_path, pe_sample):
     for fragment in fastq_iterator(files_created["first_read"]):
         assert fragment.Read1.Name == b"A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
         assert fragment.Read2.Name == b"A01284:56:HNNKWDRXY:1:2101:1524:1000 2:N:0:TAGCTT"
+        assert (
+            fragment.Read1.Sequence
+            == b"NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA"
+        )
+        assert (
+            fragment.Read2.Sequence
+            == b"NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC"
+        )
+        assert (
+            fragment.Read1.Quality
+            == b"#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FF:FFFFFFFFFFFFFFFFFFF:FFFFFF"
+        )
+        assert (
+            fragment.Read2.Quality
+            == b"#FF,FFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFF:F,FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        )
         break
     for fragment in fastq_iterator(files_created["discarded"]):
         assert fragment.Read1.Name == b"A01284:56:HNNKWDRXY:1:2101:2248:1000 1:N:0:TAGCTT"
         assert fragment.Read2.Name == b"A01284:56:HNNKWDRXY:1:2101:2248:1000 2:N:0:TAGCTT"
+        assert (
+            fragment.Read1.Sequence
+            == b"NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA"
+        )
+        assert (
+            fragment.Read2.Sequence
+            == b"NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC"
+        )
+        assert (
+            fragment.Read1.Quality
+            == b"#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF::FFFFFFFFFFFFFFF,FFFFFFFFFF:FFFF"
+        )
+        assert (
+            fragment.Read2.Quality
+            == b"#FF:FFFFF:FFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFF"
+        )
         break
 
 
@@ -193,7 +226,7 @@ def test_decide_on_barcode(tmp_path, pe_sample):
         assert second_result[1] == fragments[1]
 
 
-def tt__write_fragment(self, fragment, file_handles):
+def t__write_fragment(self, fragment, file_handles):
     for i, read in enumerate(fragment):
         file_handles[i].write(f"@{read.Name}\n{read.Sequence}\n+\n{read.Quality}\n".encode())
 

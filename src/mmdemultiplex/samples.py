@@ -73,9 +73,6 @@ class DemultiplexInputSample:
     def get_aligner_input_filenames(self):
         return self.input_filenames
 
-    def prepare_input(self):
-        return self.dependencies
-
 
 class FASTQsFromJobSelect(_FASTQsBase):
     def __init__(self, sample_name: str, job: Job):
@@ -84,13 +81,13 @@ class FASTQsFromJobSelect(_FASTQsBase):
         self.sample_name = sample_name
 
     def __call__(self):
-        return self._parse_filenames(self.job.filenames)
+        return self._parse_filenames()
 
     def _parse_filenames(self):
         correct_files = []
         for filename in self.job.filenames:
-            if sample_name in filename.name:
-                correct_files.append(filename)
+            if self.sample_name in filename:
+                correct_files.append(Path(filename))
         return super()._parse_filenames(correct_files)
 
     def __str__(self):

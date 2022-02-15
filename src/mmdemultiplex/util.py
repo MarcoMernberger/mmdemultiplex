@@ -56,9 +56,6 @@ class Fragment:
 class TemporaryToPermanent:
     def __init__(self, permanent_file: Path):
         self.permanent_file = permanent_file
-        self.tmp_directory = tempfile.TemporaryDirectory(dir=permanent_file.parent)
-        self.tmp_path = Path(self.tmp_directory.name)
-        self.temp_file = self.tmp_path / self.permanent_file.relative_to(self.permanent_file.root)
 
     def __enter__(self):
         return self
@@ -71,6 +68,9 @@ class TemporaryToPermanent:
             self.tmp_directory.cleanup()
 
     def open(self, *args, **kwargs):
+        self.tmp_directory = tempfile.TemporaryDirectory(dir=self.permanent_file.parent)
+        self.tmp_path = Path(self.tmp_directory.name)
+        self.temp_file = self.tmp_path / self.permanent_file.relative_to(self.permanent_file.root)
         self.temp_file.parent.mkdir(exist_ok=True, parents=True)
         self.file_handle = self.temp_file.open(*args, **kwargs)
         return self
@@ -78,7 +78,10 @@ class TemporaryToPermanent:
     def close(self):
         self.file_handle.close()
         shutil.move(self.temp_file, self.permanent_file)
+        delattr(self, "file_handle")
         self.tmp_directory.cleanup()
+        delattr(self, "tmp_path")
+        # delattr(self, "file_handle")
 
     def write(self, *args, **kwargs):
         self.file_handle.write(*args, **kwargs)
@@ -113,6 +116,7 @@ def iterate_fastq(fn, reverse_reads):
         try:
             name = op.readline()[1:-1].decode()
             seq = op.readline()[:-1].decode()
+            op.readline()
             qual = op.readline()[:-1].decode()
             if reverse_reads:
                 seq = seq[::-1].translate(rev_comp_table)

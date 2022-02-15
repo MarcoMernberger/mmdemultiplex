@@ -97,6 +97,12 @@ class Adapter:
             else:
                 self.locate = self.cutadapt_locate
                 self.error_rate = self.maximal_number_of_errors / float(self.minimal_overlap)
+                self.adapter = cutadapt.align.Aligner(
+                    self.adapter_sequence,
+                    self.error_rate,
+                    self.where,
+                    min_overlap=self.minimal_overlap,
+                )
             if self.index_adapter_end:
                 self.correct_for_adapter_location = (
                     lambda pos: self.adapter_sequence_length + pos
@@ -111,13 +117,6 @@ class Adapter:
                 self.get_position_from_adaptermatch = (
                     lambda match: match.rstart
                 )  # if its the end adapter, we need to trim at the beginning
-                self.adapter = cutadapt.align.Aligner(
-                    self.adapter_sequence,
-                    self.error_rate,
-                    self.where,
-                    min_overlap=self.minimal_overlap,
-                )
-                self.accept_error = self.maximal_number_of_errors > 0
 
     def cutadapt_match(self, sequence: str) -> Union[int, Literal[False]]:
         """

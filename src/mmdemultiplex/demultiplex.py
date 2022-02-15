@@ -59,10 +59,14 @@ class Demultiplexer:
         self.__initialize_decision_callbacks()
 
     def get_dependencies(self) -> List[Job]:
-        return [
+        deps = [
             ppg.ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
-            self.input_sample.prepare_input(),
         ]
+        if hasattr(self.input_sample, "prepare_input"):
+            deps.append(self.input_sample.prepare_input())
+        if hasattr(self.input_sample, "dependencies"):
+            deps.extend(self.input_sample.dependencies)
+        return deps
 
     @property
     def parameters(self) -> List[str]:
@@ -149,7 +153,7 @@ class Demultiplexer:
             sample_name = f"{self.name}_{key}"
             raw_samples[sample_name] = Sample(
                 sample_name,
-                input_strategy=FASTQsFromJobSelect(self.do_demultiplex(), sample_name),
+                input_strategy=FASTQsFromJobSelect(sample_name, self.do_demultiplex()),
                 reverse_reads=False,
                 fastq_processor=mbf_align.fastq2.Straight(),
                 pairing=pairing,
