@@ -3,6 +3,7 @@
 
 """samples.py: Contains ...."""
 
+from builtins import NotImplementedError
 from pathlib import Path
 from typing import Optional, Callable, List, Dict, Tuple, Any, Union
 from mbf_align import fastq2
@@ -23,7 +24,7 @@ class DemultiplexInputSample:
         input_strategy,
         reverse_reads,
         fastq_processor=fastq2.Straight(),
-        pairing="single",
+        pairing="paired",
     ):
         self.name = sample_name
         self.input_strategy = input_strategy
@@ -32,34 +33,28 @@ class DemultiplexInputSample:
         self.pairing = pairing
         self.dependencies = []
         self.is_paired = self.pairing in ["paired"]
-        self.get_input_files()
+        self._set_input_files()
 
-    def get_input_files(self):
+    def _set_input_files(self):
         input_pairs = self.input_strategy()
         any_r2 = any([len(x) > 1 for x in input_pairs])
         if self.pairing == "single":
             if any_r2:
-                raise PairingError(
-                    f"{self.name}: paired end lane defined as single end - you need to change the pairing parameter"
+                raise ValueError(
+                    f"{self.name}: paired end lane defined as single end - you need to change the pairing parameter. Available is ('paired', 'single', 'paired_as_single'.)"
                 )
-            input_filenames = [str(f[0]) for f in input_pairs]
+            input_filenames = [(str(f[0])) for f in input_pairs]
         elif self.pairing == "paired_as_single":
-            input_filenames = [str(f) for fl in input_pairs for f in fl]
-        elif self.pairing == "only_first":
-            input_filenames = [str(f[0]) for f in input_pairs]
-        elif self.pairing == "only_second":
-            input_filenames = [str(f[1]) for f in input_pairs]
-        elif self.pairing == "paired" or self.pairing == "paired_to_single":
+            input_filenames = [(str(f[0])) for f in input_pairs]
+        elif self.pairing == "paired":
             if not any_r2:
-                raise PairingError(
+                raise ValueError(
                     f"Paired end lane, but no R2 reads found. Found files: {input_pairs}"
                 )
-            input_filenames = [
-                (str(f[0]), str(f[1])) for f in input_pairs
-            ]  # throwing away all later...
+            input_filenames = [(str(f[0]), str(f[1])) for f in input_pairs]
         else:
-            raise PairingError("unknown pairing")  # pragma: no cover
-        if self.pairing == "paired" or self.pairing == "paired_to_single":
+            raise ValueError("unknown pairing")  # pragma: no cover
+        if self.pairing == "paired":
             flat_input_filenames = [f for fl in input_pairs for f in fl]
         else:
             flat_input_filenames = input_filenames
@@ -91,4 +86,4 @@ class FASTQsFromJobSelect(_FASTQsBase):
         return super()._parse_filenames(correct_files)
 
     def __str__(self):
-        return f"FASTQsFromJobSelect({self.job})"  # pragma: no cover
+        return f"FASTQsFromJobSelect({self.sample_name} from {self.job})"  # pragma: no cover

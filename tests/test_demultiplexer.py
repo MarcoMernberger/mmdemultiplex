@@ -3,6 +3,7 @@
 import pytest
 import pandas as pd
 import pypipegraph as ppg
+import mbf_align
 from mmdemultiplex import (
     Demultiplexer,
     DemultiplexStrategy,
@@ -13,7 +14,10 @@ from mmdemultiplex.util import get_fastq_iterator
 from pathlib import Path
 from unittest.mock import patch
 from pypipegraph import Job
-from conftest import MockBlockedFileAdapter
+from conftest import (
+    MockBlockedFileAdapter,
+    DummyDemultiplexInputSample,
+)
 
 __author__ = "MarcoMernberger"
 __copyright__ = "MarcoMernberger"
@@ -39,7 +43,9 @@ class MockDecisionCallback:
 
 def test_init(tmp_path, pe_sample, se_sample):
     barcode_df = barcode_df_callback()
-    demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
+    demultiplexer = Demultiplexer(
+        pe_sample, barcode_df_callback, output_folder=tmp_path, prefix="DM_"
+    )
     assert demultiplexer.name == f"DM_{pe_sample.name}"
     assert hasattr(demultiplexer, "barcode_df")
     assert isinstance(demultiplexer.barcode_df, pd.DataFrame)
@@ -48,7 +54,9 @@ def test_init(tmp_path, pe_sample, se_sample):
     assert demultiplexer.output_folder.exists()
     assert demultiplexer.input_sample == pe_sample
     assert demultiplexer.maximal_error_rate == 0
-    assert demultiplexer.input_files == pe_sample.get_aligner_input_filenames()
+    assert isinstance(demultiplexer.input_files, list)
+    assert isinstance(demultiplexer.input_files[0], tuple)
+    assert demultiplexer.input_files == [pe_sample.get_aligner_input_filenames()]
     assert issubclass(demultiplexer.strategy, DemultiplexStrategy)
     assert demultiplexer.is_paired
     assert hasattr(demultiplexer, "decision_callbacks")
@@ -58,7 +66,9 @@ def test_init(tmp_path, pe_sample, se_sample):
     )
     # with SE
     demultiplexer = Demultiplexer(se_sample, barcode_df_callback, output_folder=tmp_path)
-    assert demultiplexer.name == f"DM_{se_sample.name}"
+    assert isinstance(demultiplexer.input_files, list)
+    assert isinstance(demultiplexer.input_files[0], tuple)
+    assert demultiplexer.name == f"{se_sample.name}"
     assert not demultiplexer.is_paired
     # with default output folder
     with patch("pathlib.Path.mkdir", return_value=None):
@@ -66,11 +76,33 @@ def test_init(tmp_path, pe_sample, se_sample):
         assert demultiplexer.output_folder == (Path("cache") / demultiplexer.name)
 
 
+def test_with_DemultiplexInputSample(pe_sample_demultiplex, tmp_path):
+    demultiplexer = Demultiplexer(
+        pe_sample_demultiplex, barcode_df_callback, output_folder=tmp_path
+    )
+    assert demultiplexer.name == f"{pe_sample_demultiplex.name}"
+    assert demultiplexer.is_paired
+    assert isinstance(demultiplexer.input_files, list)
+    assert isinstance(demultiplexer.input_files[0], tuple)
+    sample_with_lists = DummyDemultiplexInputSample("SamplePE_DemultiplexInputSample")
+    sample_with_lists.filenames = ["R1", "R2"]
+    demultiplexer = Demultiplexer(sample_with_lists, barcode_df_callback, output_folder=tmp_path)
+    print(demultiplexer.input_files)
+    assert isinstance(demultiplexer.input_files, list)
+    assert isinstance(demultiplexer.input_files[0], tuple)
+
+
 @pytest.mark.usefixtures("new_pipegraph")
 def test_get_dependencies(tmp_path, pe_sample):
     demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
     for job in demultiplexer.get_dependencies():
         assert isinstance(job, Job) or isinstance(job, str)
+    demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
+    pe_sample.prepare_input = lambda: "prepare_input"
+    pe_sample.dependencies = ["own_deps"]
+    deps = demultiplexer.get_dependencies()
+    assert "own_deps" in deps
+    assert "prepare_input" in deps
 
 
 def test_parameters(tmp_path, pe_sample):
@@ -111,71 +143,86 @@ def test_fastq_iterator(tmp_path, pe_sample, se_sample):
                 assert hasattr(fragment, "reads")
 
 
+def test_demultiplexer_prefix(tmp_path, pe_sample):
+    prefix = "DM_"
+    demultiplexer = Demultiplexer(
+        pe_sample, barcode_df_callback, output_folder=tmp_path, prefix=prefix
+    )
+    assert demultiplexer.name == f"{prefix}{pe_sample.name}"
+    assert demultiplexer.output_folder == tmp_path / f"{prefix}{pe_sample.name}"
+
+
 @pytest.mark.usefixtures("new_pipegraph")
 def test_do_demultiplex_pe(tmp_path, pe_sample):
+    demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
     first_read_sample_name = f"{pe_sample.name}_first_read"
     discarded_sample_name = f"{pe_sample.name}_discarded"
     files_created = {
         "first_read": (
-            tmp_path / first_read_sample_name / f"{first_read_sample_name}_R1_.fastq",
-            tmp_path / first_read_sample_name / f"{first_read_sample_name}_R2_.fastq",
+            demultiplexer.output_folder
+            / first_read_sample_name
+            / f"{first_read_sample_name}_R1_.fastq",
+            demultiplexer.output_folder
+            / first_read_sample_name
+            / f"{first_read_sample_name}_R2_.fastq",
         ),
         "discarded": (
-            tmp_path / discarded_sample_name / f"{discarded_sample_name}_R1_.fastq",
-            tmp_path / discarded_sample_name / f"{discarded_sample_name}_R2_.fastq",
+            demultiplexer.output_folder
+            / discarded_sample_name
+            / f"{discarded_sample_name}_R1_.fastq",
+            demultiplexer.output_folder
+            / discarded_sample_name
+            / f"{discarded_sample_name}_R2_.fastq",
         ),
     }
     with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
-        demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
         demultiplexer.decision_callbacks = {"first_read": MockDecisionCallback()}
         job = demultiplexer.do_demultiplex()
-        print(job.dependencies)
         ppg.run_pipegraph()
         sentinel = demultiplexer.output_folder / "done.txt"
-        filepaths = [sentinel] + [
-            filename for filetuple in files_created.values() for filename in filetuple
-        ]
-        for filepath in filepaths:
-            assert filepath.exists()
+        assert sentinel.exists()
+        for filepath in job.filenames:
+            assert Path(filepath).exists()
+
     fastq_iterator = get_fastq_iterator(pe_sample.is_paired)
     for fragment in fastq_iterator(files_created["first_read"]):
-        assert fragment.Read1.Name == b"A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
-        assert fragment.Read2.Name == b"A01284:56:HNNKWDRXY:1:2101:1524:1000 2:N:0:TAGCTT"
+        assert fragment.Read1.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
+        assert fragment.Read2.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 2:N:0:TAGCTT"
         assert (
             fragment.Read1.Sequence
-            == b"NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA"
+            == "NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA"
         )
         assert (
             fragment.Read2.Sequence
-            == b"NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC"
+            == "NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC"
         )
         assert (
             fragment.Read1.Quality
-            == b"#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FF:FFFFFFFFFFFFFFFFFFF:FFFFFF"
+            == "#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FF:FFFFFFFFFFFFFFFFFFF:FFFFFF"
         )
         assert (
             fragment.Read2.Quality
-            == b"#FF,FFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFF:F,FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+            == "#FF,FFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFF:F,FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
         )
         break
     for fragment in fastq_iterator(files_created["discarded"]):
-        assert fragment.Read1.Name == b"A01284:56:HNNKWDRXY:1:2101:2248:1000 1:N:0:TAGCTT"
-        assert fragment.Read2.Name == b"A01284:56:HNNKWDRXY:1:2101:2248:1000 2:N:0:TAGCTT"
+        assert fragment.Read1.Name == "A01284:56:HNNKWDRXY:1:2101:2248:1000 1:N:0:TAGCTT"
+        assert fragment.Read2.Name == "A01284:56:HNNKWDRXY:1:2101:2248:1000 2:N:0:TAGCTT"
         assert (
             fragment.Read1.Sequence
-            == b"NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA"
+            == "NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA"
         )
         assert (
             fragment.Read2.Sequence
-            == b"NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC"
+            == "NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC"
         )
         assert (
             fragment.Read1.Quality
-            == b"#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF::FFFFFFFFFFFFFFF,FFFFFFFFFF:FFFF"
+            == "#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF::FFFFFFFFFFFFFFF,FFFFFFFFFF:FFFF"
         )
         assert (
             fragment.Read2.Quality
-            == b"#FF:FFFFF:FFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFF"
+            == "#FF:FFFFF:FFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFF"
         )
         break
 
@@ -185,27 +232,35 @@ def test_do_demultiplex_se(tmp_path, se_sample):
     first_read_sample_name = f"{se_sample.name}_first_read"
     discarded_sample_name = f"{se_sample.name}_discarded"
     files_created = {
-        "first_read": (tmp_path / first_read_sample_name / f"{first_read_sample_name}_R1_.fastq",),
-        "discarded": (tmp_path / discarded_sample_name / f"{discarded_sample_name}_R1_.fastq",),
+        "first_read": (
+            tmp_path
+            / se_sample.name
+            / first_read_sample_name
+            / f"{first_read_sample_name}_R1_.fastq",
+        ),
+        "discarded": (
+            tmp_path
+            / se_sample.name
+            / discarded_sample_name
+            / f"{discarded_sample_name}_R1_.fastq",
+        ),
     }
     with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
         demultiplexer = Demultiplexer(se_sample, barcode_df_callback, output_folder=tmp_path)
         demultiplexer.decision_callbacks = {"first_read": MockDecisionCallback()}
-        demultiplexer.do_demultiplex()
+        job = demultiplexer.do_demultiplex()
         ppg.run_pipegraph()
+        for filepath in job.filenames:
+            assert Path(filepath).exists()
         sentinel = demultiplexer.output_folder / "done.txt"
-        filepaths = [sentinel] + [
-            filename for filetuple in files_created.values() for filename in filetuple
-        ]
-        for filepath in filepaths:
-            assert filepath.exists()
+        assert sentinel.exists()
     fastq_iterator = get_fastq_iterator(se_sample.is_paired)
     for fragment in fastq_iterator(files_created["first_read"]):
-        assert fragment.Read1.Name == b"A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
+        assert fragment.Read1.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
         assert not hasattr(fragment, "Read2")
         break
     for fragment in fastq_iterator(files_created["discarded"]):
-        assert fragment.Read1.Name == b"A01284:56:HNNKWDRXY:1:2101:2248:1000 1:N:0:TAGCTT"
+        assert fragment.Read1.Name == "A01284:56:HNNKWDRXY:1:2101:2248:1000 1:N:0:TAGCTT"
         break
 
 
@@ -226,7 +281,56 @@ def test_decide_on_barcode(tmp_path, pe_sample):
         assert second_result[1] == fragments[1]
 
 
-def t__write_fragment(self, fragment, file_handles):
-    for i, read in enumerate(fragment):
-        file_handles[i].write(f"@{read.Name}\n{read.Sequence}\n+\n{read.Quality}\n".encode())
+@pytest.mark.usefixtures("new_pipegraph")
+def test__make_samples(pe_sample, tmp_path):
+    demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
+    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+        demultiplexer.decision_callbacks = {"first_read": MockDecisionCallback()}
+        job = demultiplexer.do_demultiplex()
+        demultiplexed_samples = demultiplexer._make_samples()
+        ppg.run_pipegraph()
+        assert isinstance(demultiplexed_samples, dict)
+        a_sample = list(demultiplexed_samples.values())[0]
+        assert isinstance(a_sample, mbf_align.raw.Sample)
 
+
+@pytest.mark.usefixtures("new_pipegraph")
+def test_get_samples(pe_sample, tmp_path):
+    def mock_make():
+
+        raise ValueError("this should not be called")
+
+    demultiplexer = Demultiplexer(pe_sample, barcode_df_callback, output_folder=tmp_path)
+    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+        demultiplexer.decision_callbacks = {"first_read": MockDecisionCallback()}
+        demultiplexer.do_demultiplex()
+        demultiplexed_samples = demultiplexer.get_samples()
+        assert isinstance(demultiplexed_samples, dict)
+        a_sample = list(demultiplexed_samples.values())[0]
+        assert a_sample.pairing == "paired"
+        assert not a_sample.reverse_reads
+        assert isinstance(a_sample.fastq_processor, mbf_align.fastq2.Straight)
+        assert isinstance(a_sample, mbf_align.raw.Sample)
+
+        with patch("mmdemultiplex.Demultiplexer._make_samples", mock_make):
+            demultiplexed_samples2 = demultiplexer.get_samples()
+        assert demultiplexed_samples2 == demultiplexed_samples
+        ppg.run_pipegraph()
+
+
+@pytest.mark.usefixtures("new_pipegraph")
+def test_get_samples_se(se_sample, tmp_path):
+    demultiplexer = Demultiplexer(se_sample, barcode_df_callback, output_folder=tmp_path)
+    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+        demultiplexer.decision_callbacks = {"first_read": MockDecisionCallback()}
+        demultiplexer.do_demultiplex()
+        demultiplexed_samples = demultiplexer.get_samples()
+        a_sample = list(demultiplexed_samples.values())[0]
+        assert a_sample.pairing == "single"
+        ppg.run_pipegraph()
+
+
+def get_samples(self):
+    if not hasattr(self, "raw_samples"):
+        self.raw_samples = self._make_samples()
+    return self.raw_samples

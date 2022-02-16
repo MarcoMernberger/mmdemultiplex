@@ -41,7 +41,7 @@ class Demultiplexer:
         strategy: DemultiplexStrategy = PE_Decide_On_Start_Trim_Start_End,
         output_folder: Path = None,
         maximal_error_rate: int = 0,
-        prefix: str = "DM_",
+        prefix: str = "",
     ):
         self.barcode_df = barcode_df_callback()
         self.name = f"{prefix}{sample.name}"
@@ -54,8 +54,12 @@ class Demultiplexer:
         self.input_sample = sample
         self.maximal_error_rate = maximal_error_rate
         self.input_files = self.input_sample.get_aligner_input_filenames()
-        self.strategy = strategy
         self.is_paired = self.input_sample.is_paired
+        if isinstance(self.input_files, Tuple):
+            self.input_files = [self.input_files]
+        elif isinstance(self.input_files, List) and isinstance(self.input_files[0], str):
+            self.input_files = [(x,) for x in self.input_files]
+        self.strategy = strategy
         self.__initialize_decision_callbacks()
 
     def get_dependencies(self) -> List[Job]:

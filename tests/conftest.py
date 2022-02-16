@@ -21,7 +21,7 @@ from pypipegraph.testing.fixtures import new_pipegraph  # noqa:F401
 root = pathlib.Path(__file__).parent.parent
 sys.path.append(str(root / "src"))
 from mmdemultiplex.util import Read, Fragment
-
+from mmdemultiplex.samples import DemultiplexInputSample
 
 R1 = """@A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT
 NTGCTTTATCTGTTCACTTGTGCCCTGACTTTCAACTCTGTCTCCTTCCTCTTCCTACAGTACTCCCCTGCCCTCA
@@ -44,18 +44,14 @@ NAGTGAGGAATCAGAGGCCTCCGGACCCTGGGCAACCAGCCCTGTCGTCTCTCCAGCCCCAGCTGCTCACCATCGC
 """
 
 """
-
 r2 GCCACC
-r1 TCGACC > GGTGGC 
-
+r1 TCGACC > GGTGGC
 r2 AAGTGC
 r1 CACAGT > GCACTT
-
 Exaamples below:
 #TCA_CTGGCA_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA  # CTGGCA:fw-overhang_fw-barcode_fw-constant_fw-adapter_amplicon_space_rev-comp-primer R1
 #AGT_GGTCGA_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_TTTGG_GGGTGGTTGTCAGTGGCCCTCC_GGTGGC_ATGTAC  # fw-overhang_fw-barcode_fw-constant_fw-adapter_amplicon_space_rev-comp-primer R1
 #CTAT_ACTGTG_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_CCCT_GGGTGGTTGTCAGTGGCCCTCC_GCACTT_GCTCT  # fw-overhang_fw-barcode_fw-constant_fw-adapter_amplicon_space_rev-comp-primer R1
-
 #TAGCTG_CAAAAG_GGAGGGCCACTGACAACCACCC_GGGTTT_CGATCGAT_GGGCCC_GCCTCCGGACCCTGGGCA_TGCCAG_TGA  # rev-overhang_rev-barcode_rev-constant_rev-adapter_reverse-comp-amplicon_space_rev-comp-primer R2
 #GTACAT_GCCACC_GGAGGGCCACTGACAACCACCC_CCAAA_CGATCGAT_GGGAAA_GCCTCCGGACCCTGGGCA_TCGACC_ACT  # rev-overhang_rev-barcode_rev-constant_rev-adapter_reverse-comp-amplicon_space_rev-comp-primer R2
 #AGAGC_AAGTGC_GGAGGGCCACTGACAACCACCC_AGGG_CGATCGAT_GGGAAA_GCCTCCGGACCCTGGGCA_CACAGT_ATAG  # rev-overhang_rev-barcode_rev-constant_rev-adapter_reverse-comp-amplicon_space_rev-comp-primer R2
@@ -129,7 +125,7 @@ test_reads_pe = {
         (
             "@Sample2-1mismatch:rev-overhang_rev-barcode_rev-constant_rev-adapter_reverse-comp-amplicon_space_fw-comp-primer:r2:007",
             "GTACATGCCTCCGGAGGGCCACTGACAACCACCCCCAAACGATCGATGGGAAAGCCTCCGGACCCTGGGCATCGACCACT",
-        ),  ###------------GGTGGC---------------------------------------------
+        ),
     ),
     "Sample2-empty-truncated": (
         (
@@ -192,12 +188,10 @@ test_reads_pe = {
         ),
     ),
 }
-# AGTCCCCGATGCCCAGGGTCCGGAGGCTTTCCCATCGATCGTTTGGGGGTGGTTGTCAGTGGCCCTCCTCGACCATGTAC
-# GTACATCCCCGAGGAGGGCCACTGACAACCACCCCCAAACGATCGATGGGAAAGCCTCCGGACCCTGGGCATCGACCACT
-# GTACATCCCCGAGGAGGGCCACTGACAACCACCCCCAAACGATCGATGGGAAAGCCTCCGGACCCTGGGCATCGACCACT
-# ----------------------------------------GGTCGA
+
+
 class MockBlockedFileAdapter:
-    def __init__(self, filename, *args):
+    def __init__(self, filename):
         self.filename = filename
         if "_R2_" in self.filename:
             self.file_content = io.BytesIO(R2.encode())
@@ -239,6 +233,16 @@ class DummySampleSE(DummySample):
         self.is_paired = False
 
 
+class DummyDemultiplexInputSample:
+    def __init__(self, name):
+        self.name = name
+        self.filenames = [(f"{self.name}_R1_.fastq", f"{self.name}_R2_.fastq")]
+        self.is_paired = True
+
+    def get_aligner_input_filenames(self):
+        return self.filenames
+
+
 @pytest.fixture
 def se_sample():
     return DummySampleSE("SampleSE")
@@ -250,9 +254,13 @@ def pe_sample():
 
 
 @pytest.fixture
+def pe_sample_demultiplex():
+    return DummyDemultiplexInputSample("SamplePE_DemultiplexInputSample")
+
+
+@pytest.fixture
 def paired_fragments():
     fragments = {}
-    print()
     for name in test_reads_pe:
         r1_tup, r2_tup = test_reads_pe[name]
         r1 = Read(r1_tup[0], r1_tup[1], "F" * len(r1_tup[1]))
