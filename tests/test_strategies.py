@@ -198,3 +198,20 @@ def test_match_and_trim_PE_Decide_On_Start_truncated_and_error(paired_fragments)
     assert accepted.Read1.Sequence == amplicon
     assert accepted.Read2.Sequence == amplicon_rev
 
+
+def test_match_and_trim_PE_Decide_On_Start_accept_all_no_barcode(paired_fragments):
+    df = barcode_df_full_callback()
+    row = df.loc["Sample4"]
+    matcher = PE_Decide_On_Start_Trim_Start_End(**row)
+    accepted = matcher.match_and_trim(paired_fragments["Sample3-partial-and-error"])
+    assert not accepted
+    row["start_barcode"] = ""
+    row["end_barcode"] = ""
+    r1 = paired_fragments["Sample3-partial-and-error"].Read1
+    r2 = paired_fragments["Sample3-partial-and-error"].Read2
+    matcher = PE_Decide_On_Start_Trim_Start_End(**row)
+    accepted = matcher.match_and_trim(paired_fragments["Sample3-partial-and-error"])
+    assert accepted
+    assert accepted.Read1.Sequence == r1.Sequence
+    assert accepted.Read2.Sequence == r2.Sequence
+

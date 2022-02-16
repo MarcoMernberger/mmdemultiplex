@@ -137,20 +137,20 @@ class Adapter:
         """
         alignment = self.adapter.locate(sequence)
         if alignment is None:
-            return False
+            return None
         else:
             return self.get_position_from_adaptermatch(AdapterMatch(*alignment))
 
-    def exact_locate(self, sequence: str) -> Union[int, Literal[False]]:
+    def exact_locate(self, sequence: str) -> Union[int, None]:
         sequence = self.orient_read(sequence)
         pos = sequence.find(self.adapter_sequence)  # find the exact sequence is faster
         if pos >= 0:
             ret = self.correct_for_adapter_location(pos) * self.factor
         else:
-            ret = False
+            ret = None
         return ret
 
-    def cutadapt_locate(self, sequence: str) -> Union[int, Literal[False]]:
+    def cutadapt_locate(self, sequence: str) -> Union[int, None]:
         """
         locate returns the first occurence of the adapter_sequence in
         sequence.
@@ -179,11 +179,11 @@ class Adapter:
             ret = self.correct_for_adapter_location(pos) * self.factor
         else:
             pos = self.cutadapt_match(sequence)
-            if pos:
+            if pos is not None:
                 ret = pos * self.factor
             else:
-                ret = False
+                ret = None
         return ret
 
-    def locate_null(self, sequence: str) -> Union[int, Literal[False]]:
+    def locate_null(self, sequence: str) -> Union[int, None]:
         return 0

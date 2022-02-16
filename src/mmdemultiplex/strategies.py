@@ -19,7 +19,6 @@ __license__ = "mit"
 class DemultiplexStrategy(ABC):
     @classmethod
     def trim_read_front(self, read: Read, index: int) -> Read:
-        print("forward trim", index)
         read.Name = read.Name + "_" + read.Sequence[:index]
         read.Sequence = read.Sequence[index:]
         read.Quality = read.Quality[index:]
@@ -27,7 +26,6 @@ class DemultiplexStrategy(ABC):
 
     @classmethod
     def trim_read_back(self, read: Read, index: int) -> Read:
-        print("reverse trim", index)
         read.Name = read.Name + "_" + read.Sequence[index:]
         read.Sequence = read.Sequence[:index]
         read.Quality = read.Quality[:index]
@@ -121,13 +119,13 @@ class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         "Returns None, if the fragment does not match and a trimmed fragment otherwise"
         start_in_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
         start_in_r2 = self.adapter_start_forward.locate(fragment.Read2.Sequence)
-        if not start_in_r1 and not start_in_r2:
+        if start_in_r1 is None and start_in_r2 is None:
             # start adapter nowhere to be found, discard
             return False
-        elif start_in_r1 and not start_in_r2:
+        elif start_in_r1 is not None and start_in_r2 is None:
             # start adapter in read 1 and not in read 2, nothing to be done
             pass  # pragma: no cover
-        elif not start_in_r1 and start_in_r2:
+        elif start_in_r1 is None and start_in_r2 is not None:
             # start adapter in read 2, switch reads
             start_in_r1, start_in_r2 = start_in_r2, start_in_r1
             fragment = Fragment(fragment.Read2, fragment.Read1)  # check in test
@@ -141,20 +139,20 @@ class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
             fragment.Read1, start_in_r1 + self.trim_after_start
         )  # trim start adapter in first read
         end_in_r2 = self.adapter_end_forward.locate(fragment.Read2.Sequence)
-        if not end_in_r2:
+        if end_in_r2 is None:
             # end adapter not found, discard
             return False
         fragment.Read2 = self.trim_read_front(fragment.Read2, end_in_r2 + self.trim_before_end)
         # accept fragment, both adapters are found
         # trim reverse adapters at the end of reads
         end_reverse_in_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
-        if end_reverse_in_r1:
+        if end_reverse_in_r1 is not None:
             # that means there is something to trim and it will not leave an empty string (end_reverse_in_r1 == 0)
             fragment.Read1 = self.trim_read_back(
                 fragment.Read1, end_reverse_in_r1 - self.trim_before_end
             )
         start_reverse_in_r2 = self.adapter_start_reverse.locate(fragment.Read2.Sequence)
-        if start_reverse_in_r2:
+        if start_reverse_in_r2 is not None:
             fragment.Read2 = self.trim_read_back(
                 fragment.Read2, start_reverse_in_r2 - self.trim_after_start
             )

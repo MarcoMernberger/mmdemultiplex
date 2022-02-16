@@ -60,7 +60,6 @@ def test_demultiplex_input_files_paired(tmp_path):
         "mysample", mbf_align.strategies.FASTQsFromFolder(tmp_path), reverse_reads=False,
     )
     input_files = sample.get_aligner_input_filenames()
-    print(">>", input_files)
     assert isinstance(input_files, List)
     assert isinstance(input_files[0], Tuple)
     assert input_files[0] == (str(r1), str(r2))
@@ -81,7 +80,6 @@ def test_demultiplex_input_files_single(tmp_path):
         pairing="single",
     )
     input_files = sample.get_aligner_input_filenames()
-    print(">>", input_files)
     assert isinstance(input_files, List)
     assert isinstance(input_files[0], str)
     assert input_files[0] == str(r1)
