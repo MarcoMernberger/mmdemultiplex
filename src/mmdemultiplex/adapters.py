@@ -3,13 +3,11 @@
 
 """adapters.py: Contains adapter classes and an interface to cutadapt."""
 
-from audioop import reverse
 from typing import Union, Literal
 import cutadapt
 import cutadapt.align
 import collections
 
-from mmdemultiplex.util import reverse_complement
 
 __author__ = "Marco Mernberger"
 __copyright__ = "Copyright (c) 2020 Marco Mernberger"

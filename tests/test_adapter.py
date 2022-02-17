@@ -1,18 +1,5 @@
 # -*- coding: utf-8 -*-
-
-import tempfile
-from mmdemultiplex.util import (
-    TemporaryToPermanent,
-    Fragment,
-    Read,
-    reverse_complement,
-    get_fastq_iterator,
-    iterate_fastq,
-)
 from mmdemultiplex.adapters import Adapter, WHERE_START, WHERE_END, AdapterMatch
-from pathlib import Path
-from unittest.mock import patch
-from conftest import MockBlockedFileAdapter
 
 __author__ = "MarcoMernberger"
 __copyright__ = "MarcoMernberger"
@@ -175,7 +162,6 @@ def test_find_last_adapter():
     adapter = Adapter(adapter_sequence, index_adapter_end=False, find_right_most_occurence=True)
     test = "TCA_ADAPTER_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
-    print(index)
     assert test[:index] == "TCA_"
     test = "TCA_ADAPTER_TGCCCAGGGTCCGGAGGC_ADAPTER"
     index = adapter.locate(test)
@@ -213,15 +199,15 @@ def test_partial_adapter():
     test = "APTER_REMAIN"
     assert adapter.locate(test) == 5
     test = "PTER_REMAIN"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "ADAPTE_REMAIN"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     adapter = Adapter(adapter_sequence, minimal_overlap=5, index_adapter_end=False)
     assert adapter.where == WHERE_START
     test = "REMAIN_ADAPT"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "REMAIN_DAPTER"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     adapter = Adapter(
         adapter_sequence, minimal_overlap=5, index_adapter_end=False, find_right_most_occurence=True
     )
@@ -229,9 +215,9 @@ def test_partial_adapter():
     test = "REMAIN_ADAPT"
     assert adapter.locate(test) == -5
     test = "REMAIN_ADAP"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "REMAIN_DAPTER"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
 
 
 def test_locate_front_partial_adapter():
@@ -242,10 +228,9 @@ def test_locate_front_partial_adapter():
     assert adapter.locate(test) == 18
     # no match
     test = "GGCA_TGCCC_ADAPTTR_GAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # partial back
     adapter = Adapter(adapter_sequence, minimal_overlap=4)
-    print(adapter.where == WHERE_END, adapter.where == WHERE_START)
 
     test = "DAPTER_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 6
@@ -255,20 +240,20 @@ def test_locate_front_partial_adapter():
     test = "APTER_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 5
     test = "TER_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "TTTPTER_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    assert not adapter.locate(test)  # we don't want errors, just missing parts
+    assert adapter.locate(test) is None  # we don't want errors, just missing parts
     # partial front
     adapter = Adapter(adapter_sequence, minimal_overlap=4)
     test = "ADAPTE_TGCCCAGGGTCCGGAGGC_TTTCCC"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # still no errors
     test = (
         "TC_ADAPTET_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     )
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "APTET_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # with errors
     adapter = Adapter(adapter_sequence, maximal_number_of_errors=2)
     test = (
@@ -282,7 +267,7 @@ def test_locate_front_partial_adapter():
     test = (
         "TCA_ADARRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     )
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # with errors and partial
     adapter = Adapter(adapter_sequence, maximal_number_of_errors=1, minimal_overlap=5)
     test = (
@@ -294,9 +279,9 @@ def test_locate_front_partial_adapter():
     test = "APTRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 5
     test = "DAPRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "APRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
 
 
 def test_locate_end_partial_adapter():
@@ -312,15 +297,14 @@ def test_locate_end_partial_adapter():
     assert test[:index] == "TCA_ADAPTER_CTTTTG_"
     # only exact matches
     test = "GGCA_TGCCC_ADAPTTR_GAGGC"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # a partial match (front) is better than nothing
     test = "TCA_DDDDDD_CTTTTG_ADAPTE"
     index = adapter.locate(test)
     assert test[:index] == "TCA_DDDDDD_CTTTTG_"
     # partial match (back) should not be recognized
     test = "TCA_CTTTTG_DAPTER"
-    print("locate DAPTER is", adapter.locate(test))
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     test = "TCA_ADAPTER_CTTTTG_DAPTER"
     assert adapter.locate(test) == -21
     # partial match front, if a full adapter is present, this is reported
@@ -329,7 +313,7 @@ def test_locate_end_partial_adapter():
     assert test[:index] == "TCA_"
     # no match, as overlap is too short
     test = "TCA_TCGA_CTTTTG_ADA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # now with error tolerance
     adapter = Adapter(
         adapter_sequence,
@@ -346,7 +330,7 @@ def test_locate_end_partial_adapter():
     assert adapter.locate(test) == -4
     # no match
     test = "TCA_ADDDTER_CTTTTG_ADA"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     # 1 error at the end is ok
     test = "TC_ADAPTET"
     assert adapter.locate(test) == -7
@@ -355,7 +339,7 @@ def test_locate_end_partial_adapter():
     assert adapter.locate(test) == -7
     # but this is not
     test = "TGCC_APTER"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
 
 
 def test_locate():
@@ -366,16 +350,15 @@ def test_locate():
     test = "TTT_ADAPTRR_TTT"
     assert adapter.locate(test) == 4
     test = "TTT_ADAPRRR_TTT"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
     adapter = Adapter(adapter_sequence, index_adapter_end=True, maximal_number_of_errors=1)
-    print(adapter.adapter_sequence, adapter.adapter_sequence_length)
     assert hasattr(adapter, "adapter")
     test = "ADAPTER_TTT"
     assert adapter.locate(test) == 7
     test = "TTT_ADAPTRR_TTT"
     assert adapter.locate(test) == 11
     test = "TTT_ADAPRRR_TTT"
-    assert not adapter.locate(test)
+    assert adapter.locate(test) is None
 
 
 def test_locate_0():

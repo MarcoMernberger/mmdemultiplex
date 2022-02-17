@@ -10,27 +10,19 @@ sequencing. Demultiplexing can Be defined on Forward barcodes, reverse barcodes
 and a combination of both (in case of paired end reads.
 """
 
-from io import FileIO
-import pandas as pd
 import mbf_align
 import pypipegraph as ppg
 from pathlib import Path
-from typing import Optional, Callable, List, Dict, Tuple, Any, Union
-from mbf_align import Sample  # TODO: replace with something else
-import mbf_align
+from typing import Callable, List, Dict, Tuple
+from mbf_align import Sample
 from .strategies import PE_Decide_On_Start_Trim_Start_End, DemultiplexStrategy
-from .util import Fragment, Read, get_fastq_iterator, TemporaryToPermanent
+from .util import Fragment, get_fastq_iterator, TemporaryToPermanent
 from pypipegraph import Job
-from .samples import FASTQsFromJobSelect, DemultiplexInputSample
+from .samples import FASTQsFromJobSelect
 
 __author__ = "Marco Mernberger"
 __copyright__ = "Copyright (c) 2020 Marco Mernberger"
 __license__ = "mit"
-
-
-from pathlib import Path
-import tempfile
-import shutil
 
 
 class Demultiplexer:
@@ -81,13 +73,13 @@ class Demultiplexer:
         ret += self.barcode_df.to_string()
         return ret
 
-    def __initialize_decision_callbacks(self):
+    def __initialize_decision_callbacks(self) -> None:
         self.decision_callbacks = {}
         for key, df_1_row in self.barcode_df.iterrows():
             parameters = df_1_row.to_dict()
             self.decision_callbacks[key] = self.strategy(**parameters)
 
-    def get_fastq_iterator(self):
+    def get_fastq_iterator(self) -> Callable:
         return get_fastq_iterator(self.is_paired)
 
     def _decide_on_barcode(self, fragment: Fragment):

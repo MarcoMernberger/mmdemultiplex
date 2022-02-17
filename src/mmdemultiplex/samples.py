@@ -9,7 +9,6 @@ from typing import Optional, Callable, List, Dict, Tuple, Any, Union
 from mbf_align import fastq2
 from mbf_align.strategies import _FASTQsBase
 from pypipegraph import Job
-import pandas as pd
 import pypipegraph as ppg
 
 __author__ = "Marco Mernberger"
@@ -20,9 +19,9 @@ __license__ = "mit"
 class DemultiplexInputSample:
     def __init__(
         self,
-        sample_name,
-        input_strategy,
-        reverse_reads,
+        sample_name: str,
+        input_strategy: _FASTQsBase,
+        reverse_reads: bool,
         fastq_processor=fastq2.Straight(),
         pairing="paired",
     ):

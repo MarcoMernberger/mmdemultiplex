@@ -60,7 +60,7 @@ class TemporaryToPermanent:
     def __enter__(self):
         return self
 
-    def __exit__(self, exception_type, exception_value, traceback):
+    def __exit__(self, exception_type, exception_value, traceback) -> None:
         if exception_type is None:
             self.close()
         else:
@@ -87,7 +87,7 @@ class TemporaryToPermanent:
         self.file_handle.write(*args, **kwargs)
 
     @property
-    def closed(self):
+    def closed(self) -> bool:
         if hasattr(self, "file_handle"):
             return self.file_handle.closed
         return True
@@ -110,8 +110,8 @@ def reverse_complement(sequence: str) -> str:
     return sequence[::-1].translate(rev_comp_table)
 
 
-def iterate_fastq(fn, reverse_reads):
-    op = mbf_align._common.BlockedFileAdaptor(fn)
+def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
+    op = mbf_align._common.BlockedFileAdaptor(filename)
     while True:
         try:
             name = op.readline()[1:-1].decode()
@@ -126,17 +126,17 @@ def iterate_fastq(fn, reverse_reads):
             break
 
 
-def get_fastq_iterator(paired):
+def get_fastq_iterator(paired) -> Callable:
     fastq_iterator = iterate_fastq
 
-    def _iterreads_paired_end(tuple_of_files: Tuple[Path]):
+    def _iterreads_paired_end(tuple_of_files: Tuple[Path]) -> Fragment:
         for reads in zip(
             fastq_iterator(str(tuple_of_files[0]), reverse_reads=False),
             fastq_iterator(str(tuple_of_files[1]), reverse_reads=False),
         ):
             yield Fragment(*reads)
 
-    def _iterreads_single_end(filetuple):
+    def _iterreads_single_end(filetuple) -> Fragment:
         for read in fastq_iterator(str(filetuple[0]), reverse_reads=False):
             yield Fragment(read)
 
