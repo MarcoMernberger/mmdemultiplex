@@ -36,12 +36,16 @@ AdapterMatch = collections.namedtuple(
 
 @dataclass
 class Read:
+    """Data class for sequencing reads"""
+
     Name: str
     Sequence: str
     Quality: str
 
 
 class Fragment:
+    """Data class for single-end and paired-end Reads/Fragments."""
+
     def __init__(self, *reads: Read):
         self.reads = reads
         self.Read1 = self.reads[0]
