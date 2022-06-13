@@ -15,3 +15,4 @@ from .demultiplex import Demultiplexer
 from .strategies import PE_Decide_On_Start_Trim_Start_End, DemultiplexStrategy
 from .util import Fragment, Read
 from .samples import DemultiplexInputSample
+from .plots import *

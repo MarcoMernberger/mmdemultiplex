@@ -80,7 +80,7 @@ class FASTQsFromJobSelect(_FASTQsBase):
     def _parse_filenames(self):
         correct_files = []
         for filename in self.job.filenames:
-            if self.sample_name in filename:
+            if self.sample_name in str(filename):
                 correct_files.append(Path(filename))
         return super()._parse_filenames(correct_files)
 

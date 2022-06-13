@@ -215,3 +215,25 @@ def test_match_and_trim_PE_Decide_On_Start_accept_all_no_barcode(paired_fragment
     assert accepted.Read1.Sequence == r1.Sequence
     assert accepted.Read2.Sequence == r2.Sequence
 
+
+def test_example_PE_Decide_On_Start_Trim_Start_End():
+    row = {
+        "start_barcode": "CGTAAACTCACTG",
+        "end_barcode": "TCATGTAGCTCTG",
+        "trim_after_start": 13,
+        "trim_before_end": 13
+    }
+    matcher = PE_Decide_On_Start_Trim_Start_End(**row)
+    r1 = Read(
+        'M03491:11:000000000-KFFWP:1:1101:16391:1909 1:N:0:1',
+        'CGTAAACTCACTGGTGCTGTGACTGCTTGTAGATGGCCA',
+        'AAAAA1FFFFFFGGGGGGEG1FGHG0AFEHHFHF31BFH',
+    )
+    r2 = Read(
+        'M03491:11:000000000-KFFWP:1:1101:16391:1909 2:N:0:1',
+        'TCATGTAGCTCTGCCTGTCTTTCAACTCTGTCTCCTTCC',
+        '>AAAAFFFFFFFG111G1133ADD33DGH3B3AF11A10',
+        )
+    fragment = Fragment(r1, r2)
+    accepted = matcher.match_and_trim(fragment)
+    assert accepted

@@ -19,17 +19,17 @@ __license__ = "mit"
 class DemultiplexStrategy(ABC):
     @classmethod
     def trim_read_front(self, read: Read, index: int) -> Read:
-        read.Name = read.Name + "_" + read.Sequence[:index]
-        read.Sequence = read.Sequence[index:]
-        read.Quality = read.Quality[index:]
-        return read
+        name = read.Name + "_" + read.Sequence[:index]
+        sequence = read.Sequence[index:]
+        quality = read.Quality[index:]
+        return Read(name, sequence, quality)
 
     @classmethod
     def trim_read_back(self, read: Read, index: int) -> Read:
-        read.Name = read.Name + "_" + read.Sequence[index:]
-        read.Sequence = read.Sequence[:index]
-        read.Quality = read.Quality[:index]
-        return read
+        name = read.Name + "_" + read.Sequence[index:]
+        sequence = read.Sequence[:index]
+        quality = read.Quality[:index]
+        return Read(name, sequence, quality)
 
     @abstractmethod
     def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
@@ -53,6 +53,7 @@ class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         maximal_errors_end: int = 0,
         minimal_overlap_start: int = None,
         minimal_overlap_end: int = None,
+        **kwargs
     ):
         self.start_barcode = start_barcode
         self.end_barcode = end_barcode

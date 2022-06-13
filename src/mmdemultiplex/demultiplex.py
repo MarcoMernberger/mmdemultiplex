@@ -130,6 +130,7 @@ class Demultiplexer:
                 for files_tuple in self.input_files:
                     for fragment in read_iterator(files_tuple):
                         key, accepted = self._decide_on_barcode(fragment)
+                        print(fragment.Read1.Name, key, accepted)
                         sample_name = f"{self.name}_{key}"
                         self.__write_fragment(accepted, temporary_files[sample_name])
                 # close open file handle

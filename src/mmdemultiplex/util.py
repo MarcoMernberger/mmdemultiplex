@@ -5,7 +5,7 @@
 
 from pathlib import Path
 from typing import Optional, Callable, List, Dict, Tuple, Any, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import pandas as pd
 import tempfile
 import shutil
@@ -55,6 +55,9 @@ class Fragment:
     def __iter__(self):
         for read in self.reads:
             yield read
+
+    def copy(self):
+        return Fragment(replace(self.Read1), replace(self.Read2))
 
 
 class TemporaryToPermanent:
