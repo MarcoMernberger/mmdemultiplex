@@ -141,6 +141,23 @@ class Demultiplexer:
 
         return ppg.MultiFileGeneratingJob(filenames, dump, empty_ok=True).depends_on(deps)
 
+    def get_files_to_create(self):
+        files_to_create = {}
+        sample_names = [f"{self.name}_{key}" for key in list(self.decision_callbacks.keys())] + [
+            f"{self.name}_discarded"
+        ]
+        for sample_name in sample_names:
+            files_to_create[sample_name] = [
+                self.output_folder / sample_name / f"{sample_name}_R1_.fastq"
+            ]
+            files_to_create[sample_name][0].parent.mkdir(parents=True, exist_ok=True)
+        if self.is_paired:
+            for sample_name in sample_names:
+                files_to_create[sample_name].append(
+                    self.output_folder / sample_name / f"{sample_name}_R2_.fastq"
+                )
+        return files_to_create
+
     def _make_samples(self) -> Dict[str, Sample]:
         raw_samples = {}
         pairing = "single"
