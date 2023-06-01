@@ -4,15 +4,13 @@
 """util.py: Contains utility functions for the demultiplexer package."""
 
 from pathlib import Path
-from typing import Optional, Callable, List, Dict, Tuple, Any, Union
+from typing import Optional, Callable, Tuple
 from pandas import DataFrame
 from dataclasses import dataclass, replace
-import pandas as pd
 import tempfile
 import shutil
-import pypipegraph as ppg
 import collections
-import mbf_align
+import mbf
 import re
 
 try:
@@ -160,7 +158,7 @@ def get_df_callable_for_demultiplexer(
 
 
 def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
-    op = mbf_align._common.BlockedFileAdaptor(filename)
+    op = mbf.align._common.BlockedFileAdaptor(filename)
     while True:
         try:
             name = op.readline()[1:-1].decode()
@@ -178,7 +176,7 @@ def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
 def get_fastq_iterator(paired) -> Callable:
     fastq_iterator = iterate_fastq
 
-    def _iterreads_paired_end(tuple_of_files: Tuple[Path]) -> Fragment:
+    def _iterreads_paired_end(tuple_of_files: Tuple[Path, Path]) -> Fragment:
         for reads in zip(
             fastq_iterator(str(tuple_of_files[0]), reverse_reads=False),
             fastq_iterator(str(tuple_of_files[1]), reverse_reads=False),

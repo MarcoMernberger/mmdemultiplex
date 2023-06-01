@@ -3,7 +3,7 @@
 import pytest
 import pandas as pd
 import pypipegraph as ppg
-import mbf_align
+import mbf.align
 from mmdemultiplex import (
     Demultiplexer,
     DemultiplexStrategy,

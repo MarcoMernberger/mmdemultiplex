@@ -3,7 +3,6 @@
 
 """util.py: Contains utility functions for the demultiplexer package."""
 from .demultiplex import Demultiplexer
-import collections
 import subprocess
 import pandas as pd
 import matplotlib

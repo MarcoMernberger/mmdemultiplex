@@ -13,7 +13,7 @@ import pandas as pd
 from pathlib import Path
 
 from sklearn.metrics import r2_score
-from mbf_align import Sample
+from mbf.align import Sample
 
 # from mbf_qualitycontrol.testing.fixtures import new_pipegraph_no_qc  # noqa:F401
 from pypipegraph.testing.fixtures import new_pipegraph  # noqa:F401

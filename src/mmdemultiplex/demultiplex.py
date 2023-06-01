@@ -9,13 +9,12 @@ sequences after the detected barcode. Can be applied to single end paired end
 sequencing. Demultiplexing can Be defined on Forward barcodes, reverse barcodes
 and a combination of both (in case of paired end reads.
 """
-
-import mbf_align
+import mbf
 import pypipegraph as ppg
 from pathlib import Path
-from typing import Callable, List, Dict, Tuple
-from mbf_align import Sample
-from .strategies import PE_Decide_On_Start_Trim_Start_End, DemultiplexStrategy
+from typing import Callable, List, Dict, Tuple, Optional
+from mbf.align import Sample
+from .strategies import DemultiplexStrategy, PE_Decide_On_Start_Trim_Start_End
 from .util import Fragment, get_fastq_iterator, TemporaryToPermanent
 from pypipegraph import Job
 from .samples import FASTQsFromJobSelect
@@ -31,7 +30,7 @@ class Demultiplexer:
         sample: Sample,
         barcode_df_callback: Callable,
         strategy: DemultiplexStrategy = PE_Decide_On_Start_Trim_Start_End,
-        output_folder: Path = None,
+        output_folder: Optional[Path] = None,
         maximal_error_rate: int = 0,
         prefix: str = "",
     ):
@@ -169,7 +168,7 @@ class Demultiplexer:
                 sample_name,
                 input_strategy=FASTQsFromJobSelect(sample_name, self.do_demultiplex()),
                 reverse_reads=False,
-                fastq_processor=mbf_align.fastq2.Straight(),
+                fastq_processor=mbf.align.fastq2.Straight(),
                 pairing=pairing,
                 vid=None,
             )

@@ -3,7 +3,7 @@
 
 """adapters.py: Contains adapter classes and an interface to cutadapt."""
 
-from typing import Union, Literal
+from typing import Union, Optional
 import cutadapt
 import cutadapt.align
 import collections
@@ -18,24 +18,29 @@ AdapterMatch = collections.namedtuple(
     "AdapterMatch", ["astart", "astop", "rstart", "rstop", "matches", "errors"]
 )
 
-
 WHERE_START = (
-    cutadapt.align.START_WITHIN_SEQ1  # you need this, if you don't want partial matches with the adapter start at the end
-    | cutadapt.align.START_WITHIN_SEQ2
-    | cutadapt.align.STOP_WITHIN_SEQ2
+    11  # WHERE_START should be start_in_reference & start_in_query & stop_in_query = 0b1011 = 11
 )
 WHERE_END = (
-    cutadapt.align.STOP_WITHIN_SEQ1  # you need this, if you want partial matches with the adapter end at the start
-    | cutadapt.align.START_WITHIN_SEQ2
-    | cutadapt.align.STOP_WITHIN_SEQ2
+    14  # WHERE_END should be  stop_in_reference & start_in_query & stop_in_query = 0b1110 = 14
 )
-WHERE_BOTH = (
-    cutadapt.align.START_WITHIN_SEQ1  # allow partial at front and back
-    | cutadapt.align.STOP_WITHIN_SEQ1
-    | cutadapt.align.START_WITHIN_SEQ2
-    | cutadapt.align.STOP_WITHIN_SEQ2
-)
-WHERE_NONE = cutadapt.align.START_WITHIN_SEQ2 | cutadapt.align.STOP_WITHIN_SEQ2
+# WHERE_START = (
+#     cutadapt.align.START_WITHIN_SEQ1  # you need this, if you don't want partial matches with the adapter start at the end
+#     | cutadapt.align.START_WITHIN_SEQ2
+#     | cutadapt.align.STOP_WITHIN_SEQ2
+# )
+# WHERE_END = (
+#     cutadapt.align.STOP_WITHIN_SEQ1  # you need this, if you want partial matches with the adapter end at the start
+#     | cutadapt.align.START_WITHIN_SEQ2
+#     | cutadapt.align.STOP_WITHIN_SEQ2
+# )
+# WHERE_BOTH = (
+#     cutadapt.align.START_WITHIN_SEQ1  # allow partial at front and back
+#     | cutadapt.align.STOP_WITHIN_SEQ1
+#     | cutadapt.align.START_WITHIN_SEQ2
+#     | cutadapt.align.STOP_WITHIN_SEQ2
+# )
+# WHERE_NONE = cutadapt.align.START_WITHIN_SEQ2 | cutadapt.align.STOP_WITHIN_SEQ2
 
 
 class Adapter:
@@ -44,7 +49,7 @@ class Adapter:
         adapter_sequence: str,
         maximal_number_of_errors: int = 0,
         index_adapter_end: bool = True,
-        minimal_overlap: int = None,
+        minimal_overlap: Optional[int] = None,
         find_right_most_occurence: bool = False,
     ):
         """
@@ -75,7 +80,7 @@ class Adapter:
         self.orient_read = lambda x: x
         self.factor = 1
         self.index_adapter_end = index_adapter_end
-        self.where = WHERE_START
+        self.flags = WHERE_START  # this might be wrong
         if self.find_right_most:
             self.adapter_sequence = self.adapter_sequence[::-1]
             self.orient_read = lambda x: x[::-1]
@@ -91,14 +96,14 @@ class Adapter:
         else:
             if self.maximal_number_of_errors == 0 and (not self.accept_overlap):
                 self.locate = self.exact_locate
-                self.error_rate = 0
+                self.error_rate = 0.0
             else:
                 self.locate = self.cutadapt_locate
                 self.error_rate = self.maximal_number_of_errors / float(self.minimal_overlap)
                 self.adapter = cutadapt.align.Aligner(
-                    self.adapter_sequence,
-                    self.error_rate,
-                    self.where,
+                    reference=self.adapter_sequence,
+                    max_error_rate=self.error_rate,
+                    flags=self.flags,
                     min_overlap=self.minimal_overlap,
                 )
             if self.index_adapter_end:
@@ -116,7 +121,7 @@ class Adapter:
                     lambda match: match.rstart
                 )  # if its the end adapter, we need to trim at the beginning
 
-    def cutadapt_match(self, sequence: str) -> Union[int, Literal[False]]:
+    def cutadapt_match(self, sequence: str) -> Optional[int]:
         """
         cutadapt_match uses the predefined cutadapt.align.Aligner instance
         to locate a partial match of adapter_sequence and returns an
@@ -176,11 +181,11 @@ class Adapter:
         if pos >= 0:
             ret = self.correct_for_adapter_location(pos) * self.factor
         else:
-            pos = self.cutadapt_match(sequence)
-            if pos is not None:
-                ret = pos * self.factor
+            optpos = self.cutadapt_match(sequence)
+            if optpos is not None:
+                ret = optpos * self.factor
             else:
-                ret = None
+                ret = optpos
         return ret
 
     def locate_null(self, sequence: str) -> Union[int, None]:

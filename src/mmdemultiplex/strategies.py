@@ -4,12 +4,9 @@
 """strategies.py: Contains different demultiplexing strategies."""
 
 from abc import abstractmethod, ABC
-from pathlib import Path
-from typing import Optional, Callable, List, Dict, Tuple, Any, Union, Literal
+from typing import List, Union, Literal, Optional
 from .util import Fragment, Read, reverse_complement
 from .adapters import Adapter
-import pandas as pd
-import pypipegraph as ppg
 
 __author__ = "Marco Mernberger"
 __copyright__ = "Copyright (c) 2020 Marco Mernberger"
@@ -51,8 +48,8 @@ class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         trim_before_end: int = 0,
         maximal_errors_start: int = 0,
         maximal_errors_end: int = 0,
-        minimal_overlap_start: int = None,
-        minimal_overlap_end: int = None,
+        minimal_overlap_start: Optional[int] = None,
+        minimal_overlap_end: Optional[int] = None,
         **kwargs
     ):
         self.start_barcode = start_barcode

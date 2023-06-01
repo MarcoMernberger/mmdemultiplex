@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-import mbf_align
+import mbf.align
 import os
 from mmdemultiplex.samples import DemultiplexInputSample, FASTQsFromJobSelect
 from typing import Tuple, List
@@ -19,7 +19,9 @@ def test_demultiplex_input_sample(tmp_path):
     r1.touch()
     r2.touch()
     sample = DemultiplexInputSample(
-        "mysample", mbf_align.strategies.FASTQsFromFolder(tmp_path), reverse_reads=False,
+        "mysample",
+        mbf_align.strategies.FASTQsFromFolder(tmp_path),
+        reverse_reads=False,
     )
     assert sample.name == "mysample"
     assert isinstance(sample.input_strategy, mbf_align.strategies.FASTQsFromFolder)
@@ -42,7 +44,12 @@ def test_demultiplex_input_sample(tmp_path):
     os.remove(r2)
     strat = mbf_align.strategies.FASTQsFromFolder(tmp_path)
     strat.dependencies = [MultiFileGeneratingJob(["somefiles"], lambda: None)]
-    sample = DemultiplexInputSample("mysample", strat, reverse_reads=True, pairing="single",)
+    sample = DemultiplexInputSample(
+        "mysample",
+        strat,
+        reverse_reads=True,
+        pairing="single",
+    )
     assert sample.reverse_reads
     assert sample.pairing == "single"
     for job in sample.dependencies:
@@ -57,7 +64,9 @@ def test_demultiplex_input_files_paired(tmp_path):
     r1.touch()
     r2.touch()
     sample = DemultiplexInputSample(
-        "mysample", mbf_align.strategies.FASTQsFromFolder(tmp_path), reverse_reads=False,
+        "mysample",
+        mbf_align.strategies.FASTQsFromFolder(tmp_path),
+        reverse_reads=False,
     )
     input_files = sample.get_aligner_input_filenames()
     assert isinstance(input_files, List)

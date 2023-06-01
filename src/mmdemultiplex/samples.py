@@ -6,8 +6,8 @@
 from builtins import NotImplementedError
 from pathlib import Path
 from typing import Optional, Callable, List, Dict, Tuple, Any, Union
-from mbf_align import fastq2
-from mbf_align.strategies import _FASTQsBase
+from mbf.align import fastq2
+from mbf.align.strategies import _FASTQsBase
 from pypipegraph import Job
 import pypipegraph as ppg
 

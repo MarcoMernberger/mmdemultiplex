@@ -18,32 +18,42 @@ def test_adapter_init():
     assert adapter.adapter_sequence_length == 6
     assert adapter.minimal_overlap == 6
     assert adapter.index_adapter_end
-    assert adapter.where == WHERE_START
+    assert adapter.flags == WHERE_START
     assert adapter.correct_for_adapter_location(5) == 11
     assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, -1, 1, -1, -1])) == 1
     assert not adapter.find_right_most
     assert adapter.locate.__name__ == adapter.exact_locate.__name__
     adapter_sequence = "CTACACG"
     adapter = Adapter(
-        adapter_sequence, 1, False, minimal_overlap=2, find_right_most_occurence=True,
+        adapter_sequence,
+        1,
+        False,
+        minimal_overlap=2,
+        find_right_most_occurence=True,
     )
     assert adapter.maximal_number_of_errors == 1
     assert adapter.adapter_sequence == "GCACATC"
     assert adapter.adapter_sequence_length == 7
     assert adapter.minimal_overlap == 2
     assert adapter.index_adapter_end
-    assert adapter.where == WHERE_START
+    assert adapter.flags == WHERE_START
     assert adapter.correct_for_adapter_location(5) == 12
     assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, -1, 1, -1, -1])) == 1
     assert adapter.find_right_most
     assert adapter.locate.__name__ == adapter.cutadapt_locate.__name__
-    adapter = Adapter(adapter_sequence, 1, True, minimal_overlap=2, find_right_most_occurence=True,)
+    adapter = Adapter(
+        adapter_sequence,
+        1,
+        True,
+        minimal_overlap=2,
+        find_right_most_occurence=True,
+    )
     assert adapter.maximal_number_of_errors == 1
     assert adapter.adapter_sequence == "GCACATC"
     assert adapter.adapter_sequence_length == 7
     assert adapter.minimal_overlap == 2
     assert not adapter.index_adapter_end
-    assert adapter.where == WHERE_START
+    assert adapter.flags == WHERE_START
     assert adapter.correct_for_adapter_location(5) == 5
     assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, 2, 1, -1, -1])) == 2
     assert adapter.find_right_most
@@ -203,7 +213,7 @@ def test_partial_adapter():
     test = "ADAPTE_REMAIN"
     assert adapter.locate(test) is None
     adapter = Adapter(adapter_sequence, minimal_overlap=5, index_adapter_end=False)
-    assert adapter.where == WHERE_START
+    assert adapter.flags == WHERE_START
     test = "REMAIN_ADAPT"
     assert adapter.locate(test) is None
     test = "REMAIN_DAPTER"
@@ -211,7 +221,7 @@ def test_partial_adapter():
     adapter = Adapter(
         adapter_sequence, minimal_overlap=5, index_adapter_end=False, find_right_most_occurence=True
     )
-    assert adapter.where == WHERE_START
+    assert adapter.flags == WHERE_START
     test = "REMAIN_ADAPT"
     assert adapter.locate(test) == -5
     test = "REMAIN_ADAP"
@@ -289,7 +299,7 @@ def test_locate_end_partial_adapter():
     adapter = Adapter(
         adapter_sequence, index_adapter_end=False, find_right_most_occurence=True, minimal_overlap=4
     )
-    assert adapter.where == WHERE_START
+    assert adapter.flags == WHERE_START
     # last occurence, start pos
     test = "TCA_ADAPTER_CTTTTG_ADAPTER_CAGCTA"
     index = adapter.locate(test)
