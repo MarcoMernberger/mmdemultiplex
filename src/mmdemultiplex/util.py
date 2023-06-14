@@ -129,6 +129,10 @@ def get_df_callable_for_demultiplexer(
         df = df_in.copy()
         df[fw_col_name].fillna("", inplace=True)
         df[rv_col_name].fillna("", inplace=True)
+        df[fw_col_name] = df[fw_col_name].str.strip()
+        df[fw_col_name] = df[fw_col_name].str.upper()
+        df[rv_col_name] = df[rv_col_name].str.strip()
+        df[rv_col_name] = df[rv_col_name].str.upper()
         whitespace = re.compile(r"\s+")
         assert len(df[fw_col_name].unique()) == len(df)  # check if the barcodes are unique
         df["key"] = df[sample_col_name].str.replace(whitespace, "_")
