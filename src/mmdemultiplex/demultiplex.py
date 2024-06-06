@@ -31,7 +31,6 @@ class Demultiplexer:
         barcode_df_callback: Callable,
         strategy: DemultiplexStrategy = PE_Decide_On_Start_Trim_Start_End,
         output_folder: Optional[Path] = None,
-        maximal_error_rate: int = 0,
         prefix: str = "",
     ):
         self.barcode_df = barcode_df_callback()
@@ -43,7 +42,6 @@ class Demultiplexer:
             self.output_folder = output_folder / self.name
         self.output_folder.mkdir(parents=True, exist_ok=True)
         self.input_sample = sample
-        self.maximal_error_rate = maximal_error_rate
         self.input_files = self.input_sample.get_aligner_input_filenames()
         self.is_paired = self.input_sample.is_paired
         if isinstance(self.input_files, Tuple):
@@ -52,6 +50,13 @@ class Demultiplexer:
             self.input_files = [(x,) for x in self.input_files]
         self.strategy = strategy
         self.__initialize_decision_callbacks()
+        self.__check_pairing()
+
+    def __check_pairing(self):
+        if self.is_paired and str(self.strategy.__class__).startswith("SE"):
+            raise AttributeError("Strategy is not compatible with paired end reads")
+        elif not self.is_paired and str(self.strategy.__class__).startswith("PE"):
+            raise AttributeError("Strategy is not compatible with single end reads")
 
     def get_dependencies(self) -> List[Job]:
         deps = [

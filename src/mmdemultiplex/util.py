@@ -42,6 +42,8 @@ class Read:
     Sequence: str
     Quality: str
 
+    def reverse():
+        return Read(self.Name, reverse_complement(self.Sequence[::-1]), self.Quality[::-1])
 
 class Fragment:
     """Data class for single-end and paired-end Reads/Fragments."""
@@ -134,7 +136,7 @@ def get_df_callable_for_demultiplexer(
         df[rv_col_name] = df[rv_col_name].str.strip()
         df[rv_col_name] = df[rv_col_name].str.upper()
         whitespace = re.compile(r"\s+")
-        assert len(df[fw_col_name].unique()) == len(df)  # check if the barcodes are unique
+        assert len((df[fw_col_name] + df[rv_col_name]).unique()) == len(df)  # check if the barcodes are unique
         df["key"] = df[sample_col_name].str.replace(whitespace, "_")
         df = df.set_index("key")
 
