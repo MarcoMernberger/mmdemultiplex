@@ -11,6 +11,7 @@ and a combination of both (in case of paired end reads.
 """
 import mbf
 import pypipegraph as ppg
+from collections import Counter
 from pathlib import Path
 from typing import Callable, List, Dict, Tuple, Optional
 from mbf.align import Sample
@@ -183,3 +184,24 @@ class Demultiplexer:
         if not hasattr(self, "raw_samples"):
             self.raw_samples = self._make_samples()
         return self.raw_samples
+
+    def count_adapters(self, k: int = 10, most_common: Optional[int] = None):
+        """
+        count_adapters counts the starting kmers of the reads in the input files.
+        This is to check the actual adapters/barcodes used for demultiplexing.
+        """
+        deps = self.get_dependencies()
+        output_file = self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
+
+        def count():
+            read_iterator = self.get_fastq_iterator()
+            counter = Counter()
+            for files_tuple in self.input_files:
+                for fragment in read_iterator(files_tuple):
+                    for read in fragment:
+                        counter[read.Sequence[:k]] += 1
+            with output_file.open("w") as outp:
+                for count in counter.most_common(most_common):
+                    outp.write(f"{count[0]}\t{count[1]}\n")
+
+        return ppg.FileGeneratingJob(output_file, count, empty_ok=True).depends_on(deps)
