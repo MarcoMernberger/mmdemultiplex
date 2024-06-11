@@ -12,7 +12,18 @@ finally:
 
 
 from .demultiplex import Demultiplexer
-from .strategies import PE_Decide_On_Start_Trim_Start_End, DemultiplexStrategy, PE_Decide_On_Start_End_Trim_Start_End, SE_Decide_On_Start_Trim_Start_End
-from .util import Fragment, Read, get_df_callable_for_demultiplexer
+from .strategies import (
+    PE_Decide_On_Start_Trim_Start_End,
+    DemultiplexStrategy,
+    PE_Decide_On_Start_End_Trim_Start_End,
+    SE_Decide_On_Start_Trim_Start_End,
+)
+from .util import (
+    Fragment,
+    Read,
+    get_df_callable_for_demultiplexer,
+    reverse_complement,
+)
+
 from .samples import DemultiplexInputSample
 from .plots import *

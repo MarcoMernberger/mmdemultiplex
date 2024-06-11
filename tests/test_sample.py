@@ -20,20 +20,20 @@ def test_demultiplex_input_sample(tmp_path):
     r2.touch()
     sample = DemultiplexInputSample(
         "mysample",
-        mbf_align.strategies.FASTQsFromFolder(tmp_path),
+        mbf.align.strategies.FASTQsFromFolder(tmp_path),
         reverse_reads=False,
     )
     assert sample.name == "mysample"
-    assert isinstance(sample.input_strategy, mbf_align.strategies.FASTQsFromFolder)
+    assert isinstance(sample.input_strategy, mbf.align.strategies.FASTQsFromFolder)
     assert not sample.reverse_reads
-    assert isinstance(sample.fastq_processor, mbf_align.fastq2.Straight)
+    assert isinstance(sample.fastq_processor, mbf.align.fastq2.Straight)
     assert sample.pairing == "paired"
     for job in sample.dependencies:
         assert isinstance(job, Job)
     assert sample.is_paired
     sample = DemultiplexInputSample(
         "mysample",
-        mbf_align.strategies.FASTQsFromFolder(tmp_path),
+        mbf.align.strategies.FASTQsFromFolder(tmp_path),
         reverse_reads=True,
         pairing="paired_as_single",
     )
@@ -42,7 +42,7 @@ def test_demultiplex_input_sample(tmp_path):
         assert isinstance(job, Job)
     assert not sample.is_paired
     os.remove(r2)
-    strat = mbf_align.strategies.FASTQsFromFolder(tmp_path)
+    strat = mbf.align.strategies.FASTQsFromFolder(tmp_path)
     strat.dependencies = [MultiFileGeneratingJob(["somefiles"], lambda: None)]
     sample = DemultiplexInputSample(
         "mysample",
@@ -65,7 +65,7 @@ def test_demultiplex_input_files_paired(tmp_path):
     r2.touch()
     sample = DemultiplexInputSample(
         "mysample",
-        mbf_align.strategies.FASTQsFromFolder(tmp_path),
+        mbf.align.strategies.FASTQsFromFolder(tmp_path),
         reverse_reads=False,
     )
     input_files = sample.get_aligner_input_filenames()
@@ -84,7 +84,7 @@ def test_demultiplex_input_files_single(tmp_path):
     r1.touch()
     sample = DemultiplexInputSample(
         "mysample",
-        mbf_align.strategies.FASTQsFromFolder(tmp_path),
+        mbf.align.strategies.FASTQsFromFolder(tmp_path),
         reverse_reads=False,
         pairing="single",
     )
@@ -104,7 +104,7 @@ def test_demultiplex_input_files_raise_exceptions(tmp_path):
     with pytest.raises(ValueError):
         DemultiplexInputSample(
             "mysample",
-            mbf_align.strategies.FASTQsFromFolder(tmp_path),
+            mbf.align.strategies.FASTQsFromFolder(tmp_path),
             reverse_reads=False,
             pairing="single",
         )
@@ -112,14 +112,14 @@ def test_demultiplex_input_files_raise_exceptions(tmp_path):
     with pytest.raises(ValueError):
         DemultiplexInputSample(
             "mysample",
-            mbf_align.strategies.FASTQsFromFolder(tmp_path),
+            mbf.align.strategies.FASTQsFromFolder(tmp_path),
             reverse_reads=False,
             pairing="paired",
         )
     with pytest.raises(ValueError):
         DemultiplexInputSample(
             "mysample",
-            mbf_align.strategies.FASTQsFromFolder(tmp_path),
+            mbf.align.strategies.FASTQsFromFolder(tmp_path),
             reverse_reads=False,
             pairing="wrong",
         )
@@ -127,7 +127,12 @@ def test_demultiplex_input_files_raise_exceptions(tmp_path):
 
 @pytest.mark.usefixtures("new_pipegraph")
 def test_FASTQsFromJobSelect_init():
-    filenames = ["sample1_R1_.fastq", "sample1_R2_.fastq", "sample2_R1_.fastq", "sample2_R2_.fastq"]
+    filenames = [
+        "sample1_R1_.fastq",
+        "sample1_R2_.fastq",
+        "sample2_R1_.fastq",
+        "sample2_R2_.fastq",
+    ]
     job = MultiFileGeneratingJob(filenames, lambda: None)
     sample_name = "sample1"
     select = FASTQsFromJobSelect(sample_name, job)
@@ -138,7 +143,12 @@ def test_FASTQsFromJobSelect_init():
 
 @pytest.mark.usefixtures("new_pipegraph")
 def test_FASTQsFromJobSelect_parse(tmp_path):
-    filenames = ["sample1_R1_.fastq", "sample1_R2_.fastq", "sample2_R1_.fastq", "sample2_R2_.fastq"]
+    filenames = [
+        "sample1_R1_.fastq",
+        "sample1_R2_.fastq",
+        "sample2_R1_.fastq",
+        "sample2_R2_.fastq",
+    ]
     job = MultiFileGeneratingJob(filenames, lambda: None)
     sample_name = "sample1"
     select = FASTQsFromJobSelect(sample_name, job)

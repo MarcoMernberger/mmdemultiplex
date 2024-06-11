@@ -20,7 +20,10 @@ def test_adapter_init():
     assert adapter.index_adapter_end
     assert adapter.flags == WHERE_START
     assert adapter.correct_for_adapter_location(5) == 11
-    assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, -1, 1, -1, -1])) == 1
+    assert (
+        adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, -1, 1, -1, -1]))
+        == 1
+    )
     assert not adapter.find_right_most
     assert adapter.locate.__name__ == adapter.exact_locate.__name__
     adapter_sequence = "CTACACG"
@@ -38,7 +41,10 @@ def test_adapter_init():
     assert adapter.index_adapter_end
     assert adapter.flags == WHERE_START
     assert adapter.correct_for_adapter_location(5) == 12
-    assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, -1, 1, -1, -1])) == 1
+    assert (
+        adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, -1, 1, -1, -1]))
+        == 1
+    )
     assert adapter.find_right_most
     assert adapter.locate.__name__ == adapter.cutadapt_locate.__name__
     adapter = Adapter(
@@ -55,18 +61,26 @@ def test_adapter_init():
     assert not adapter.index_adapter_end
     assert adapter.flags == WHERE_START
     assert adapter.correct_for_adapter_location(5) == 5
-    assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, 2, 1, -1, -1])) == 2
+    assert (
+        adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, 2, 1, -1, -1]))
+        == 2
+    )
     assert adapter.find_right_most
     assert adapter.locate.__name__ == adapter.cutadapt_locate.__name__
     adapter = Adapter(adapter_sequence, index_adapter_end=False)
     assert adapter.correct_for_adapter_location(5) == 5
-    assert adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, 2, 1, -1, -1])) == 2
+    assert (
+        adapter.get_position_from_adaptermatch(AdapterMatch(*[-1, -1, 2, 1, -1, -1]))
+        == 2
+    )
     assert not adapter.find_right_most
 
 
 def test_adapter_not_present():
     adapter_sequence = "ADAPTER"
-    adapter = Adapter(adapter_sequence, index_adapter_end=False, find_right_most_occurence=True)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=False, find_right_most_occurence=True
+    )
     test = "TCA_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
     assert not index
@@ -77,7 +91,9 @@ def test_adapter_not_present():
 
 def test_find_last_adapter_start_index():
     adapter_sequence = "ADAPTER"
-    adapter = Adapter(adapter_sequence, index_adapter_end=False, find_right_most_occurence=True)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=False, find_right_most_occurence=True
+    )
     test = "TCA_ADAPTER_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
     assert index == -33
@@ -90,7 +106,9 @@ def test_find_last_adapter_start_index():
 
 def test_find_last_adapter_end_index():
     adapter_sequence = "ADAPTER"
-    adapter = Adapter(adapter_sequence, index_adapter_end=True, find_right_most_occurence=True)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=True, find_right_most_occurence=True
+    )
     test = "TCA_ADAPTER_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
     assert index == -26
@@ -137,7 +155,9 @@ def test_locate_find_first_adapter():
     test = "TCA_ADAPTER_TGCCCAGGGTCCGGAGGC_ADAPTER"
     assert test[index:] == "_TGCCCAGGGTCCGGAGGC_ADAPTER"
     # with error
-    adapter = Adapter(adapter_sequence, index_adapter_end=True, maximal_number_of_errors=1)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=True, maximal_number_of_errors=1
+    )
     test = "TCA_ADDPTER_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
     test[index:] == "_TGCCCAGGGTCCGGAGGC_TTTCCC"
@@ -149,7 +169,9 @@ def test_locate_find_first_adapter():
     test = "TCA_ADDPTER_TGCCCAGGGTCCGGAGGC_ADAPTTR"
     index = adapter.locate(test)
     assert test[:index] == "TCA_ADDPTER"
-    adapter = Adapter(adapter_sequence, index_adapter_end=True, maximal_number_of_errors=2)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=True, maximal_number_of_errors=2
+    )
     # if both adapter have errors, accept the better one
     test = "TCA_ADDPTTR_TGCCCAGGGTCCGGAGGC_ADAPTTR"
     index = adapter.locate(test)
@@ -157,7 +179,9 @@ def test_locate_find_first_adapter():
     test = "TCA_ADDPTTR_TGCCCAGGGTCCGGAGGC_"
     index = adapter.locate(test)
     assert test[:index] == "TCA_ADDPTTR"
-    adapter = Adapter(adapter_sequence, index_adapter_end=False, maximal_number_of_errors=1)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=False, maximal_number_of_errors=1
+    )
     test = "TCA_ADDPTER_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
     assert test[:index] == "TCA_"
@@ -169,7 +193,9 @@ def test_locate_find_first_adapter():
 def test_find_last_adapter():
     # find last adapter
     adapter_sequence = "ADAPTER"
-    adapter = Adapter(adapter_sequence, index_adapter_end=False, find_right_most_occurence=True)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=False, find_right_most_occurence=True
+    )
     test = "TCA_ADAPTER_TGCCCAGGGTCCGGAGGC_TTTCCC"
     index = adapter.locate(test)
     assert test[:index] == "TCA_"
@@ -219,7 +245,10 @@ def test_partial_adapter():
     test = "REMAIN_DAPTER"
     assert adapter.locate(test) is None
     adapter = Adapter(
-        adapter_sequence, minimal_overlap=5, index_adapter_end=False, find_right_most_occurence=True
+        adapter_sequence,
+        minimal_overlap=5,
+        index_adapter_end=False,
+        find_right_most_occurence=True,
     )
     assert adapter.flags == WHERE_START
     test = "REMAIN_ADAPT"
@@ -258,31 +287,21 @@ def test_locate_front_partial_adapter():
     test = "ADAPTE_TGCCCAGGGTCCGGAGGC_TTTCCC"
     assert adapter.locate(test) is None
     # still no errors
-    test = (
-        "TC_ADAPTET_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    )
+    test = "TC_ADAPTET_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) is None
     test = "APTET_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) is None
     # with errors
     adapter = Adapter(adapter_sequence, maximal_number_of_errors=2)
-    test = (
-        "TCA_ADAPTRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    )
+    test = "TCA_ADAPTRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 11
-    test = (
-        "TCA_ADAPRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    )
+    test = "TCA_ADAPRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 11
-    test = (
-        "TCA_ADARRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    )
+    test = "TCA_ADARRRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) is None
     # with errors and partial
     adapter = Adapter(adapter_sequence, maximal_number_of_errors=1, minimal_overlap=5)
-    test = (
-        "TCA_ADAPTRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
-    )
+    test = "TCA_ADAPTRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 11
     test = "DAPTRR_TGCCCAGGGTCCGGAGGC_TTTCCC_ATCGATCG_GGGCCC_GGGTGGTTGTCAGTGGCCCTCC_CTTTTG_CAGCTA"
     assert adapter.locate(test) == 6
@@ -297,7 +316,10 @@ def test_locate_front_partial_adapter():
 def test_locate_end_partial_adapter():
     adapter_sequence = "ADAPTER"
     adapter = Adapter(
-        adapter_sequence, index_adapter_end=False, find_right_most_occurence=True, minimal_overlap=4
+        adapter_sequence,
+        index_adapter_end=False,
+        find_right_most_occurence=True,
+        minimal_overlap=4,
     )
     assert adapter.flags == WHERE_START
     # last occurence, start pos
@@ -354,14 +376,18 @@ def test_locate_end_partial_adapter():
 
 def test_locate():
     adapter_sequence = "ADAPTER"
-    adapter = Adapter(adapter_sequence, index_adapter_end=False, maximal_number_of_errors=1)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=False, maximal_number_of_errors=1
+    )
     test = "ADAPTER_TTT"
     assert adapter.locate(test) == 0
     test = "TTT_ADAPTRR_TTT"
     assert adapter.locate(test) == 4
     test = "TTT_ADAPRRR_TTT"
     assert adapter.locate(test) is None
-    adapter = Adapter(adapter_sequence, index_adapter_end=True, maximal_number_of_errors=1)
+    adapter = Adapter(
+        adapter_sequence, index_adapter_end=True, maximal_number_of_errors=1
+    )
     assert hasattr(adapter, "adapter")
     test = "ADAPTER_TTT"
     assert adapter.locate(test) == 7

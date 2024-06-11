@@ -142,7 +142,7 @@ def test_reverse_complement():
 
 
 def test_iterate_fastq():
-    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+    with patch("mbf.align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
         iterator = iterate_fastq("_R1_", reverse_reads=False)
         for read in iterator:
             assert read.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
@@ -155,7 +155,7 @@ def test_iterate_fastq():
                 == "#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FF:FFFFFFFFFFFFFFFFFFF:FFFFFF"
             )
             break
-    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+    with patch("mbf.align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
         iterator = iterate_fastq("_R1_", reverse_reads=True)
         for read in iterator:
             assert read.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
@@ -174,14 +174,23 @@ def test_iterate_fastq():
 def test_get_fastq_iterator(se_sample, pe_sample):
     iterator = get_fastq_iterator(pe_sample.is_paired)
     assert iterator.__name__ == "_iterreads_paired_end"
-    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+    with patch("mbf.align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
         fragments = [fragment for fragment in iterator(pe_sample.filenames)]
-        assert fragments[0].Read1.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
-        assert fragments[0].Read2.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 2:N:0:TAGCTT"
+        assert (
+            fragments[0].Read1.Name
+            == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
+        )
+        assert (
+            fragments[0].Read2.Name
+            == "A01284:56:HNNKWDRXY:1:2101:1524:1000 2:N:0:TAGCTT"
+        )
 
     iterator = get_fastq_iterator(se_sample.is_paired)
     assert iterator.__name__ == "_iterreads_single_end"
-    with patch("mbf_align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
+    with patch("mbf.align._common.BlockedFileAdaptor", MockBlockedFileAdapter):
         fragments = [fragment for fragment in iterator(se_sample.filenames)]
-        assert fragments[0].Read1.Name == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
+        assert (
+            fragments[0].Read1.Name
+            == "A01284:56:HNNKWDRXY:1:2101:1524:1000 1:N:0:TAGCTT"
+        )
         assert not hasattr(fragments[0], "Read2")

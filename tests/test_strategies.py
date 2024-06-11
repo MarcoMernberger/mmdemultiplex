@@ -128,22 +128,35 @@ def test_init_adapter_PE_Decide_On_Start_Trim_Start_End():
     assert hasattr(strat, "adapter_end_forward")
     assert hasattr(strat, "adapter_end_reverse")
     assert strat.adapter_start_forward.adapter_sequence == strat.start_barcode
-    assert strat.adapter_start_forward.maximal_number_of_errors == strat.maximal_errors_start
+    assert (
+        strat.adapter_start_forward.maximal_number_of_errors
+        == strat.maximal_errors_start
+    )
     assert strat.adapter_start_forward.where == mmdemultiplex.adapters.WHERE_START
     assert strat.adapter_start_forward.minimal_overlap == strat.minimal_overlap_start
     assert (
         strat.adapter_start_reverse.adapter_sequence
         == reverse_complement(strat.start_barcode)[::-1]
     )
-    assert strat.adapter_start_reverse.maximal_number_of_errors == strat.maximal_errors_start
+    assert (
+        strat.adapter_start_reverse.maximal_number_of_errors
+        == strat.maximal_errors_start
+    )
     assert strat.adapter_start_reverse.where == mmdemultiplex.adapters.WHERE_START
     assert strat.adapter_start_reverse.minimal_overlap == strat.minimal_overlap_start
     assert strat.adapter_end_forward.adapter_sequence == strat.end_barcode
-    assert strat.adapter_end_forward.maximal_number_of_errors == strat.maximal_errors_end
+    assert (
+        strat.adapter_end_forward.maximal_number_of_errors == strat.maximal_errors_end
+    )
     assert strat.adapter_end_forward.where == mmdemultiplex.adapters.WHERE_START
     assert strat.adapter_end_forward.minimal_overlap == strat.minimal_overlap_end
-    assert strat.adapter_end_reverse.adapter_sequence == reverse_complement(strat.end_barcode)[::-1]
-    assert strat.adapter_end_reverse.maximal_number_of_errors == strat.maximal_errors_end
+    assert (
+        strat.adapter_end_reverse.adapter_sequence
+        == reverse_complement(strat.end_barcode)[::-1]
+    )
+    assert (
+        strat.adapter_end_reverse.maximal_number_of_errors == strat.maximal_errors_end
+    )
     assert strat.adapter_end_reverse.where == mmdemultiplex.adapters.WHERE_START
     assert strat.adapter_end_reverse.minimal_overlap == strat.minimal_overlap_end
 
@@ -221,19 +234,19 @@ def test_example_PE_Decide_On_Start_Trim_Start_End():
         "start_barcode": "CGTAAACTCACTG",
         "end_barcode": "TCATGTAGCTCTG",
         "trim_after_start": 13,
-        "trim_before_end": 13
+        "trim_before_end": 13,
     }
     matcher = PE_Decide_On_Start_Trim_Start_End(**row)
     r1 = Read(
-        'M03491:11:000000000-KFFWP:1:1101:16391:1909 1:N:0:1',
-        'CGTAAACTCACTGGTGCTGTGACTGCTTGTAGATGGCCA',
-        'AAAAA1FFFFFFGGGGGGEG1FGHG0AFEHHFHF31BFH',
+        "M03491:11:000000000-KFFWP:1:1101:16391:1909 1:N:0:1",
+        "CGTAAACTCACTGGTGCTGTGACTGCTTGTAGATGGCCA",
+        "AAAAA1FFFFFFGGGGGGEG1FGHG0AFEHHFHF31BFH",
     )
     r2 = Read(
-        'M03491:11:000000000-KFFWP:1:1101:16391:1909 2:N:0:1',
-        'TCATGTAGCTCTGCCTGTCTTTCAACTCTGTCTCCTTCC',
-        '>AAAAFFFFFFFG111G1133ADD33DGH3B3AF11A10',
-        )
+        "M03491:11:000000000-KFFWP:1:1101:16391:1909 2:N:0:1",
+        "TCATGTAGCTCTGCCTGTCTTTCAACTCTGTCTCCTTCC",
+        ">AAAAFFFFFFFG111G1133ADD33DGH3B3AF11A10",
+    )
     fragment = Fragment(r1, r2)
     accepted = matcher.match_and_trim(fragment)
     assert accepted

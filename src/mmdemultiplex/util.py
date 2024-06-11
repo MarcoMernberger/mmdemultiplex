@@ -26,7 +26,9 @@ __copyright__ = "Copyright (c) 2020 Marco Mernberger"
 __license__ = "mit"
 
 
-rev_comp_table = maketrans(b"ACBDGHKMNSRUTWVYacbdghkmnsrutwvy", b"TGVHCDMKNSYAAWBRTGVHCDMKNSYAAWBR")
+rev_comp_table = maketrans(
+    b"ACBDGHKMNSRUTWVYacbdghkmnsrutwvy", b"TGVHCDMKNSYAAWBRTGVHCDMKNSYAAWBR"
+)
 
 
 AdapterMatch = collections.namedtuple(
@@ -43,7 +45,10 @@ class Read:
     Quality: str
 
     def reverse():
-        return Read(self.Name, reverse_complement(self.Sequence[::-1]), self.Quality[::-1])
+        return Read(
+            self.Name, reverse_complement(self.Sequence[::-1]), self.Quality[::-1]
+        )
+
 
 class Fragment:
     """Data class for single-end and paired-end Reads/Fragments."""
@@ -79,7 +84,9 @@ class TemporaryToPermanent:
     def open(self, *args, **kwargs):
         self.tmp_directory = tempfile.TemporaryDirectory(dir=self.permanent_file.parent)
         self.tmp_path = Path(self.tmp_directory.name)
-        self.temp_file = self.tmp_path / self.permanent_file.relative_to(self.permanent_file.root)
+        self.temp_file = self.tmp_path / self.permanent_file.relative_to(
+            self.permanent_file.root
+        )
         self.temp_file.parent.mkdir(exist_ok=True, parents=True)
         self.file_handle = self.temp_file.open(*args, **kwargs)
         return self
@@ -136,7 +143,9 @@ def get_df_callable_for_demultiplexer(
         df[rv_col_name] = df[rv_col_name].str.strip()
         df[rv_col_name] = df[rv_col_name].str.upper()
         whitespace = re.compile(r"\s+")
-        assert len((df[fw_col_name] + df[rv_col_name]).unique()) == len(df)  # check if the barcodes are unique
+        assert len((df[fw_col_name] + df[rv_col_name]).unique()) == len(
+            df
+        )  # check if the barcodes are unique
         df["key"] = df[sample_col_name].str.replace(whitespace, "_")
         df = df.set_index("key")
 
@@ -158,7 +167,9 @@ def get_df_callable_for_demultiplexer(
                     trim_end_col_name: "trim_before_end",
                 }
             )
-            return df[["start_barcode", "end_barcode", "trim_after_start", "trim_before_end"]]
+            return df[
+                ["start_barcode", "end_barcode", "trim_after_start", "trim_before_end"]
+            ]
 
     return call
 
@@ -197,3 +208,9 @@ def get_fastq_iterator(paired) -> Callable:
         return _iterreads_paired_end
     else:
         return _iterreads_single_end
+
+
+def len_callback(fragment):
+    if len(fragment.Read1.Sequence) < len(fragment.Read2.Sequence):
+        fragment = Fragment(fragment.Read2, fragment.Read1)
+    return fragment
