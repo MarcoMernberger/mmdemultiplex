@@ -33,6 +33,7 @@ class Demultiplexer:
         strategy: DemultiplexStrategy = PE_Decide_On_Start_Trim_Start_End,
         output_folder: Optional[Path] = None,
         prefix: str = "",
+        filter_callable: Callable = None,
     ):
         self.barcode_df = barcode_df_callback()
         self.name = f"{prefix}{sample.name}"
@@ -54,6 +55,11 @@ class Demultiplexer:
         self.strategy = strategy
         self.__initialize_decision_callbacks()
         self.__check_pairing()
+        self.filter_func = filter_callable
+        if self.filter_func is None:
+            self._decide_for_fragment = self._decide_on_barcode
+        else:
+            self._decide_for_fragment = self._decide_on_barcode_and_filter
 
     def __check_pairing(self):
         if self.is_paired and str(self.strategy.__class__).startswith("SE"):
@@ -96,6 +102,11 @@ class Demultiplexer:
                 return key, accepted
         return "discarded", fragment
 
+    def _decide_on_barcode_and_filter(self, fragment: Fragment):
+        if not self.filter_func(fragment):
+            return "discarded", fragment
+        return self._decide_on_barcode(fragment)
+
     def __write_fragment(
         self, fragment: Fragment, file_handles: List[TemporaryToPermanent]
     ) -> None:
@@ -137,8 +148,7 @@ class Demultiplexer:
                 read_iterator = self.get_fastq_iterator()
                 for files_tuple in self.input_files:
                     for fragment in read_iterator(files_tuple):
-                        key, accepted = self._decide_on_barcode(fragment)
-                        print(fragment.Read1.Name, key, accepted)
+                        key, accepted = self._decide_for_fragment(fragment)
                         sample_name = f"{self.name}_{key}"
                         self.__write_fragment(accepted, temporary_files[sample_name])
                 # close open file handle
@@ -225,9 +235,7 @@ class Demultiplexer:
         This is to check the actual adapters/barcodes used for demultiplexing.
         """
         deps = self.get_dependencies()
-        print(new_output_folder)
         new_output_folder.mkdir(parents=True, exist_ok=True)
-        print(new_output_folder.exists())
         outfiles = (
             new_output_folder / input_files[0][0].name,
             new_output_folder / input_files[0][1].name,

@@ -27,3 +27,4 @@ from .util import (
 
 from .samples import DemultiplexInputSample
 from .plots import *
+from .filter import SequenceFilter

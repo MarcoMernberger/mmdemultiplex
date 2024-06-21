@@ -3,7 +3,7 @@
 
 """adapters.py: Contains adapter classes and an interface to cutadapt."""
 
-from typing import Union, Optional
+from typing import Union, Optional, Tuple
 import cutadapt
 import cutadapt.align
 import collections
@@ -18,12 +18,22 @@ AdapterMatch = collections.namedtuple(
     "AdapterMatch", ["astart", "astop", "rstart", "rstop", "matches", "errors"]
 )
 
-WHERE_START = (
-    11  # WHERE_START should be start_in_reference & start_in_query & stop_in_query = 0b1011 = 11
-)
-WHERE_END = (
-    14  # WHERE_END should be  stop_in_reference & start_in_query & stop_in_query = 0b1110 = 14
-)
+
+# To allow skipping of a prefix of the reference at no cost, set the
+# |  START_IN_REFERENCE flag.
+# |  To allow skipping of a prefix of the query at no cost, set the
+# |  START_IN_QUERY flag.
+# |  If both are set, a prefix of the reference or the query is skipped,
+# |  never both.
+# |  Similarly, set STOP_IN_REFERENCE and STOP_IN_QUERY to
+# |  allow skipping of suffixes of the reference or of the query. Again, it
+# |  is never the case that both suffixes are skipped.
+# |  If all flags are set, this results in standard semiglobal alignment.
+
+
+WHERE_START = 11  # WHERE_START should be start_in_reference & start_in_query & stop_in_query = 0b1011 = 11, that means we can get adapters within the reference, but the start must be present
+WHERE_END = 14  # WHERE_END should be stop_in_reference & start_in_query & stop_in_query = 0b1110 = 14, that means we can get adapters within the reference, but the end must be present
+WHERE_SEMIGLOBAL = 15
 # WHERE_START = (
 #     cutadapt.align.START_WITHIN_SEQ1  # you need this, if you don't want partial matches with the adapter start at the end
 #     | cutadapt.align.START_WITHIN_SEQ2
@@ -51,6 +61,7 @@ class Adapter:
         index_adapter_end: bool = True,
         minimal_overlap: Optional[int] = None,
         find_right_most_occurence: bool = False,
+        find_best_match: bool = True,
     ):
         """
         This is a wrapper class for cutadapt.Aligner.
@@ -81,7 +92,11 @@ class Adapter:
         self.factor = 1
         self.index_adapter_end = index_adapter_end
         self.flags = WHERE_START  # this might be wrong
-        if self.find_right_most:
+        self.find_best_match = find_best_match
+        self.cutadapt_caller = self.cutadapt_call_first
+        if self.find_best_match:
+            self.cutadapt_caller = self.cutadapt_call_best
+        if self.find_right_most:  # turn everything around
             self.adapter_sequence = self.adapter_sequence[::-1]
             self.orient_read = lambda x: x[::-1]
             self.factor = -1
@@ -99,7 +114,9 @@ class Adapter:
                 self.error_rate = 0.0
             else:
                 self.locate = self.cutadapt_locate
-                self.error_rate = self.maximal_number_of_errors / float(self.minimal_overlap)
+                self.error_rate = self.maximal_number_of_errors / float(
+                    self.minimal_overlap
+                )
                 self.adapter = cutadapt.align.Aligner(
                     reference=self.adapter_sequence,
                     max_error_rate=self.error_rate,
@@ -138,11 +155,80 @@ class Adapter:
             A named tuple containing the start/stop in adapter, start, stop in
             sequuence, the number of mismatches and the error count.
         """
-        alignment = self.adapter.locate(sequence)
+        alignment = self.cutadapt_caller(sequence)
         if alignment is None:
             return None
         else:
             return self.get_position_from_adaptermatch(AdapterMatch(*alignment))
+
+    def cutadapt_call_best(self, sequence: str) -> Tuple[int, int, int, int, int, int]:
+        """
+        Calls cutadapt multiple times to return the best match of an adapter.
+
+        Parameters
+        ----------
+        sequence : str
+            the sequence to search
+
+        Returns
+        -------
+        Tuple[int, int, int, int, int, int]
+            the alignment
+        """
+        alignment = self.cutadapt_call_first(sequence)
+        return self.get_best_from_all(alignment, sequence)
+
+    def cutadapt_call_first(self, sequence: str) -> Tuple[int, int, int, int, int, int]:
+        """
+        Calls cutadapt once to return the first match of an adapter.
+
+        Parameters
+        ----------
+        sequence : str
+            the sequence to search
+
+        Returns
+        -------
+        Tuple[int, int, int, int, int, int]
+            the alignment
+        """
+        return self.adapter.locate(sequence)
+
+    def get_best_from_all(
+        self, alignment: Tuple[int, int, int, int, int, int], sequence: str
+    ) -> Tuple[int, int, int, int, int, int]:
+        """
+        get_best_from_all calls cudaopt.align.locate multiple times to get all
+        possible alignments, then returns the one with the best score.
+
+        Parameters
+        ----------
+        alignment : Tuple[int, int, int, int, int, int]
+            the first found alignment
+        sequence : str
+            the sequence to search
+
+        Returns
+        -------
+        Tuple[int, int, int, int, int, int]
+            the best scored alignment
+        """
+        # if we need the rightmost, a new alignment must have the same or better score
+        # if we choose the leftmoost, a new alignment must have a better score
+        best_alignment = alignment
+        current = self.adapter.locate(sequence)
+        index = 0
+        while current is not None:
+            if (
+                current[-1] < best_alignment[-1]
+            ):  # this one is better, or if finding_right_most, this one is at least equivalent
+                best_alignment = (
+                    current[:2] + (current[2] + index, current[3] + index) + current[4:]
+                )
+            sequence = sequence[current[3] :]
+            index += current[3]
+            current = self.adapter.locate(sequence)
+        return best_alignment
 
     def exact_locate(self, sequence: str) -> Union[int, None]:
         sequence = self.orient_read(sequence)
@@ -176,11 +262,8 @@ class Adapter:
             The position to trim the provided sequence to get rid of the adapter.
             If no adapter is located, return False.
         """
-        sequence = self.orient_read(sequence)
-        pos = sequence.find(self.adapter_sequence)
-        if pos >= 0:
-            ret = self.correct_for_adapter_location(pos) * self.factor
-        else:
+        ret = self.exact_locate(sequence)
+        if ret is None:
             optpos = self.cutadapt_match(sequence)
             if optpos is not None:
                 ret = optpos * self.factor
@@ -190,3 +273,6 @@ class Adapter:
 
     def locate_null(self, sequence: str) -> Union[int, None]:
         return 0
+
+    def __str__(self):
+        return f"Adapter: {self.adapter_sequence}, errors: {self.maximal_number_of_errors}, overlap: {self.minimal_overlap}, index_adapter_end: {self.index_adapter_end}, find_right_most_occurence: {self.find_right_most}"

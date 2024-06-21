@@ -30,11 +30,11 @@ class DemultiplexStrategy(ABC):
 
     @abstractmethod
     def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
-        pass  # pragma: no cover
+        raise NotImplementedError()  # pragma: no cover
 
     @abstractmethod
     def get_parameters(self) -> List:
-        pass  # pragma: no cover
+        raise NotImplementedError()  # pragma: no cover
 
 
 class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
@@ -140,7 +140,9 @@ class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         end_in_r2 = self.adapter_end_forward.locate(fragment.Read2.Sequence)
         if end_in_r2 is not None:
             # end adapter found, trim it
-            fragment.Read2 = self.trim_read_front(fragment.Read2, end_in_r2 + self.trim_before_end)
+            fragment.Read2 = self.trim_read_front(
+                fragment.Read2, end_in_r2 + self.trim_before_end
+            )
         # trim reverse adapters at the end of reads
         end_reverse_in_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
         if end_reverse_in_r1 is not None:
@@ -177,7 +179,7 @@ class SE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         Demultiplex and Trim strategy based on start and end adapters.
 
         This strategy assumes that only the first adapter is relevant for demultiplexing.
-        The end adapter is only used for trimming. If the start adapter is not found, the 
+        The end adapter is only used for trimming. If the start adapter is not found, the
         fragment is discarded. If the start adapter is found, the fragment is trimmed at the
         start adapter. If the end adapter is found, the fragment is trimmed at the end adapter.
         If the end adapter is not found, the fragment is trimmed at the reverse end adapter.
@@ -278,12 +280,14 @@ class SE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         Union[Fragment, Literal[False]]
             A fragment that has the start adapter removed and, if present also
             the end adapter. The sequence will be oriented in forward direction
-            from the perspective of the start adapter. 
+            from the perspective of the start adapter.
             If the fragment is empty after trimming, False is returned.
             If the start adapter is not found, False is returned.
         """
         start_in_read = self.adapter_start_forward.locate(fragment.Read1.Sequence)
-        start_reverse_in_read = self.adapter_start_reverse.locate(fragment.Read1.Sequence)
+        start_reverse_in_read = self.adapter_start_reverse.locate(
+            fragment.Read1.Sequence
+        )
         if start_in_read is None and start_reverse_in_read is None:
             # start adapter nowhere to be found, discard
             return False
@@ -293,12 +297,16 @@ class SE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         elif start_in_read is None and start_reverse_in_read is not None:
             # reverse start adapter in read, turn the thing around
             start_in_read = start_reverse_in_read  # we want to trim the adapter
-            fragment = Fragment(fragment.Read1.reverse())  # we want to turn around the sequence so all are oriented right
+            fragment = Fragment(
+                fragment.Read1.reverse()
+            )  # we want to turn around the sequence so all are oriented right
         else:  # start_in_read and start_reverse_in_read
             if start_in_read > start_reverse_in_read:
                 # start reverse adapter in read is more likely
                 start_in_read = start_reverse_in_read  # we want to trim the adapter
-                fragment = Fragment(fragment.Read1.reverse())  # we want to turn around the sequence so all are oriented right
+                fragment = Fragment(
+                    fragment.Read1.reverse()
+                )  # we want to turn around the sequence so all are oriented right
         # now read contains start adapter forward
         fragment.Read1 = self.trim_read_front(
             fragment.Read1, start_in_read + self.trim_after_start
@@ -306,13 +314,19 @@ class SE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         end_in_read = self.adapter_end_forward.locate(fragment.Read1.Sequence)
         if end_in_read is not None:
             # end read found, trim it
-            fragment.Read1 = self.trim_read_back(fragment.Read1, end_in_read + self.trim_before_end)
+            fragment.Read1 = self.trim_read_back(
+                fragment.Read1, end_in_read + self.trim_before_end
+            )
         # accept fragment, both adapters are found
         # trim reverse adapters at the end of reads
         else:
-            end_reverse_in_read = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
+            end_reverse_in_read = self.adapter_end_reverse.locate(
+                fragment.Read1.Sequence
+            )
             if end_reverse_in_read is not None:
-                fragment.Read1 = self.trim_read_back(fragment.Read1, end_reverse_in_read + self.trim_before_end)
+                fragment.Read1 = self.trim_read_back(
+                    fragment.Read1, end_reverse_in_read + self.trim_before_end
+                )
             else:
                 # no end adapter found, nothing to be done
                 pass
@@ -421,11 +435,14 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
         fragment.Read1 = self.trim_read_front(
             fragment.Read1, start_in_r1 + self.trim_after_start
         )  # trim start adapter in first read
+        #        raise ValueError()
         end_in_r2 = self.adapter_end_forward.locate(fragment.Read2.Sequence)
         if end_in_r2 is None:
             # end adapter not found, discard
             return False
-        fragment.Read2 = self.trim_read_front(fragment.Read2, end_in_r2 + self.trim_before_end)
+        fragment.Read2 = self.trim_read_front(
+            fragment.Read2, end_in_r2 + self.trim_before_end
+        )
         # accept fragment, both adapters are found
         # trim reverse adapters at the end of reads
         end_reverse_in_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)

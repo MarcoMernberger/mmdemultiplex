@@ -49,15 +49,26 @@ class Read:
             self.Name, reverse_complement(self.Sequence[::-1]), self.Quality[::-1]
         )
 
+    def __str__(self):
+        return f"{self.Name}\n{self.Sequence}\n+\n{self.Quality}\n"
+
 
 class Fragment:
     """Data class for single-end and paired-end Reads/Fragments."""
 
     def __init__(self, *reads: Read):
-        self.reads = reads
-        self.Read1 = self.reads[0]
+        self.Read1 = reads[0]
         if len(reads) == 2:
-            self.Read2 = self.reads[1]
+            self.Read2 = reads[1]
+
+    @property
+    def reads(self):
+        if hasattr(self, "Read2"):
+            return [self.Read1, self.Read2]
+        else:
+            return [
+                self.Read1,
+            ]
 
     def __iter__(self):
         for read in self.reads:
@@ -65,6 +76,9 @@ class Fragment:
 
     def copy(self):
         return Fragment(replace(self.Read1), replace(self.Read2))
+
+    def __str__(self):
+        return f"{self.Read1}\n{self.Read2}\n"
 
 
 class TemporaryToPermanent:
@@ -213,4 +227,18 @@ def get_fastq_iterator(paired) -> Callable:
 def len_callback(fragment):
     if len(fragment.Read1.Sequence) < len(fragment.Read2.Sequence):
         fragment = Fragment(fragment.Read2, fragment.Read1)
+    return fragment
+
+
+def create_fragment(sequences, qualities=None, names=None):
+    "make sequences into fragments with default names and qualities"
+    if qualities is None:
+        qualities = ["F" * len(sequence) for sequence in sequences]
+    if names is None:
+        names = ["read" + str(i) for i in range(len(sequences))]
+    reads = [
+        Read(name, sequence, quality)
+        for name, sequence, quality in zip(names, sequences, qualities)
+    ]
+    fragment = Fragment(*reads)
     return fragment

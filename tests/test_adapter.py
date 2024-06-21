@@ -170,11 +170,14 @@ def test_locate_find_first_adapter():
     index = adapter.locate(test)
     assert test[:index] == "TCA_ADDPTER"
     adapter = Adapter(
-        adapter_sequence, index_adapter_end=True, maximal_number_of_errors=2
+        adapter_sequence,
+        index_adapter_end=True,
+        maximal_number_of_errors=2,
     )
-    # if both adapter have errors, accept the better one
+    # if both adapter have errors, accept the better one <-- cutadapt always accepts the first match
     test = "TCA_ADDPTTR_TGCCCAGGGTCCGGAGGC_ADAPTTR"
     index = adapter.locate(test)
+    print("index=", index)
     assert test[:index] == "TCA_ADDPTTR_TGCCCAGGGTCCGGAGGC_ADAPTTR"
     test = "TCA_ADDPTTR_TGCCCAGGGTCCGGAGGC_"
     index = adapter.locate(test)
