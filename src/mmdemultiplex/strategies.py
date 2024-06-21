@@ -336,6 +336,108 @@ class SE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
         return fragment
 
 
+class SE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
+    """Only the start barcode is relevant"""
+
+    def __init__(
+        self,
+        start_barcode: str,
+        trim_after_start: int = 20,
+        maximal_errors_start: int = 0,
+        min_length: int = 0,
+        minimal_overlap_start: Optional[int] = None,
+        **kwargs
+    ):
+        """
+        Demultiplex and Trim strategy based on start adapter.
+
+        This strategy assumes that there is a single end sequuencing and only
+        the first adapter is relevant for trimming.
+        The read is trimmed X bp after the start adapter. If the start adapter is not found, the
+        The end adapter is only used for trimming. If the start adapter is not found, the
+        fragment is discarded.
+
+        Parameters
+        ----------
+        start_barcode : str
+            Barcode at the start of read
+        trim_after_start : int, optional
+            an offset position to trim after the start adapter, by default 0
+        maximal_errors_start : int, optional
+            max number of errors in start adapter allowed for a match, by default 0
+        min_length : Optional[int], optional
+            the minimal remaining read length, by default 0
+        minimal_overlap_start : Optional[int], optional
+            the amount of overlap for a truncated start adapter, by default None
+        """
+        self.start_barcode = start_barcode
+        self.trim_after_start = trim_after_start
+        self.maximal_errors_start = maximal_errors_start
+        self.minimal_overlap_start = minimal_overlap_start
+        self.min_length = min_length
+        if minimal_overlap_start is None:
+            self.minimal_overlap_start = len(self.start_barcode)
+        self._init_adapter()
+
+    def get_parameters(self) -> List:
+        return [
+            self.start_barcode,
+            self.trim_after_start,
+            self.maximal_errors_start,
+            self.minimal_overlap_start,
+        ]
+
+    def _init_adapter(self) -> None:
+        # this is the adapter at the start of the read
+        self.adapter_start_forward = Adapter(
+            self.start_barcode,
+            maximal_number_of_errors=self.maximal_errors_start,
+            index_adapter_end=True,
+            minimal_overlap=self.minimal_overlap_start,
+            find_right_most_occurence=False,
+        )
+
+    def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        """
+        Trims a fragment based on start and end adapters.
+
+        Parameters
+        ----------
+        fragment : Fragment
+            The Fragment to be trimmed/demultiplexed.
+
+        Returns
+        -------
+        Union[Fragment, Literal[False]]
+            A fragment that has the start adapter removed and, if present also
+            the end adapter. The sequence will be oriented in forward direction
+            from the perspective of the start adapter.
+            If the fragment is empty after trimming, False is returned.
+            If the start adapter is not found, False is returned.
+        """
+        start_in_read = self.adapter_start_forward.locate(fragment.Read1.Sequence)
+        if start_in_read is None:
+            # start adapter nowhere to be found, discard
+            return False
+        else:  # start_in_read and start_reverse_in_read
+            print(fragment.Read1.Sequence)
+            print(self.trim_after_start)
+            print(start_in_read)
+            fragment.Read1 = self.trim_read_back(
+                fragment.Read1, start_in_read + self.trim_after_start
+            )  # trim after the adapter
+            print(fragment.Read1.Sequence)
+            fragment.Read1 = self.trim_read_front(
+                fragment.Read1, start_in_read
+            )  # trim start adapter in first read
+            print(fragment.Read1.Sequence)
+            print(len(fragment.Read1.Sequence), self.min_length)
+            if len(fragment.Read1.Sequence) < self.min_length:
+                # we killed it, discard
+                return False
+            return fragment
+
+
 class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
     """The start barcode alone is relevant"""
 

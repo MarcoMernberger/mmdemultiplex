@@ -5,6 +5,7 @@ import mmdemultiplex
 from mmdemultiplex import (
     DemultiplexStrategy,
     PE_Decide_On_Start_Trim_Start_End,
+    SE_Trim_On_Start_Trim_After_X_BP,
 )
 from mmdemultiplex.util import Read, Fragment, reverse_complement
 from conftest import barcode_df_full_callback, barcode_df_callback
@@ -248,5 +249,70 @@ def test_example_PE_Decide_On_Start_Trim_Start_End():
         ">AAAAFFFFFFFG111G1133ADD33DGH3B3AF11A10",
     )
     fragment = Fragment(r1, r2)
+    accepted = matcher.match_and_trim(fragment)
+    assert accepted
+
+
+def test_example_SE_Trim_On_Start_Trim_After_X_BP():
+    row = {
+        "start_barcode": "AACACCG",
+        "trim_after_start": 20,
+        "maximal_errors_start": 1,
+        "min_length": 9,
+    }
+    matcher = SE_Trim_On_Start_Trim_After_X_BP(**row)
+    r1 = Read(
+        "M03491:32:000000000-DP5KD:1:1101:15207:1341 1:N:0:1",
+        "AGCTTGTGGAAAGGACGAAACACCGCAAATACTCTTACAAGACCGGTTTTA",
+        "DDDDDFFFDFFFGGGGGGGGGGHGGGGGGHHHHHHHHHHHHHHHGGGGGGH",
+    )
+    r2 = Read(
+        "M03491:32:000000000-DP5KD:1:1101:15702:1342 1:N:0:1",
+        "CAACTTGTGGAAAGGACGAAACACCGAAATTATGGCGAGTTCAGTGGTTTT",
+        ">A?AAFF1CAFFGFGFGEECAEHFGGGCECGFHH1AEE/AF1DAF2FFFHG",
+    )
+    r2_mismatch = Read(
+        "M03491:32:000000000-DP5KD:1:1101:15702:1342 1:N:0:1",
+        "CAACTTGTGGAAAGGACGAAACACCTAAATTATGGCGAGTTCAGTGGTTTT",
+        ">A?AAFF1CAFFGFGFGEECAEHFGGGCECGFHH1AEE/AF1DAF2FFFHG",
+    )
+    r2_too_short = Read(
+        "M03491:32:000000000-DP5KD:1:1101:15702:1342 1:N:0:1",
+        "CAACTTGTGGAAAGGACGAAACACCGAAATTAT",
+        ">A?AAFF1CAFFGFGFGEECAEHFGGGCECGFH",
+    )
+    r2_not_too_short = Read(
+        "M03491:32:000000000-DP5KD:1:1101:15702:1342 1:N:0:1",
+        "CAACTTGTGGAAAGGACGAAACACCGAAATTATGGT",
+        ">A?AAFF1CAFFGFGFGEECAEHFGGGCECGFHH1T",
+    )
+
+    r1_no_code = Read(
+        "M03491:32:000000000-DP5KD:1:1101:15207:1341 1:N:0:1",
+        "AGCTTGTGGAAAGGACGAAATTTTTCAAATACTCTTACAAGACCGGTTTTA",
+        "DDDDDFFFDFFFGGGGGGGGGGHGGGGGGHHHHHHHHHHHHHHHGGGGGGH",
+    )
+
+    fragment = Fragment(r1)
+    accepted = matcher.match_and_trim(fragment)
+    assert accepted.Read1.Sequence == "CAAATACTCTTACAAGACCG"
+
+    fragment = Fragment(r2)
+    accepted = matcher.match_and_trim(fragment)
+    assert accepted.Read1.Sequence == "AAATTATGGCGAGTTCAGTG"
+
+    fragment = Fragment(r2_mismatch)
+    accepted = matcher.match_and_trim(fragment)
+    assert accepted.Read1.Sequence == "AAATTATGGCGAGTTCAGTG"
+
+    fragment = Fragment(r2_too_short)
+    accepted = matcher.match_and_trim(fragment)
+    assert not accepted
+
+    fragment = Fragment(r1_no_code)
+    accepted = matcher.match_and_trim(fragment)
+    assert not accepted
+
+    fragment = Fragment(r2_not_too_short)
     accepted = matcher.match_and_trim(fragment)
     assert accepted
