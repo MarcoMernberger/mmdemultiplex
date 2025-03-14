@@ -25,6 +25,7 @@ from .util import (
     Read,
     get_df_callable_for_demultiplexer,
     reverse_complement,
+    get_fastq_iterator
 )
 
 from .samples import DemultiplexInputSample
