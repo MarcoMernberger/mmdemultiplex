@@ -62,8 +62,12 @@ class Fragment:
             self.Read2 = reads[1]
 
     @property
+    def is_paired(self):
+        return hasattr(self, "Read2")
+
+    @property
     def reads(self):
-        if hasattr(self, "Read2"):
+        if self.is_paired:
             return [self.Read1, self.Read2]
         else:
             return [

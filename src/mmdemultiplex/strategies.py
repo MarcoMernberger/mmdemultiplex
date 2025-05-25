@@ -36,6 +36,24 @@ class DemultiplexStrategy(ABC):
     def get_parameters(self) -> List:
         raise NotImplementedError()  # pragma: no cover
 
+    def trim_fragment_to_length(self, fragment: Fragment) -> Fragment:
+        if self.trim_length_r1 > 0:
+            fragment.Read1 = self.trim_read_to_length(
+                fragment.Read1, self.trim_length_r1
+            )  # trim first read to specified length
+        if self.trim_length_r2 > 0:
+            fragment.Read2 = self.trim_read_to_length(
+                fragment.Read2, self.trim_length_r2
+            )  # trim second read to specified length
+        return fragment
+
+    def trim_read_to_length(self, read: Read, trim_length: int) -> Read:
+        if (trim_length > 0) and (len(read.Sequence) >= trim_length):
+            read = self.trim_read_back(
+                read, trim_length
+            )  # trim first read to specified length
+        return read
+
 
 class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
     """The start barcode alone is relevant"""
@@ -439,7 +457,7 @@ class SE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
 
 
 class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
-    """The start barcode alone is relevant"""
+    """The start barcode and end barcode are is relevant"""
 
     def __init__(
         self,
@@ -447,6 +465,8 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
         end_barcode: str,
         trim_after_start: int = 0,
         trim_before_end: int = 0,
+        trim_length_r1: int = 0,
+        trim_length_r2: int = 0,
         maximal_errors_start: int = 0,
         maximal_errors_end: int = 0,
         minimal_overlap_start: Optional[int] = None,
@@ -455,8 +475,10 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
     ):
         self.start_barcode = start_barcode
         self.end_barcode = end_barcode
-        self.trim_before_end = trim_before_end
         self.trim_after_start = trim_after_start
+        self.trim_before_end = trim_before_end
+        self.trim_length_r1 = trim_length_r1
+        self.trim_length_r2 = trim_length_r2
         self.maximal_errors_start = maximal_errors_start
         self.maximal_errors_end = maximal_errors_end
         self.minimal_overlap_start = minimal_overlap_start
@@ -474,6 +496,8 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
             self.end_barcode,
             self.trim_before_end,
             self.trim_after_start,
+            self.trim_length_r2,
+            self.trim_length_r1,
             self.maximal_errors_start,
             self.maximal_errors_end,
             self.minimal_overlap_start,
@@ -560,4 +584,4 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
             )
         if len(fragment.Read2.Sequence) == 0 or len(fragment.Read1.Sequence) == 0:
             return False
-        return fragment
+        return self.trim_fragment_to_length(fragment)
