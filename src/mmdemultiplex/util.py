@@ -164,7 +164,7 @@ def get_df_callable_for_demultiplexer(
         assert len((df[fw_col_name] + df[rv_col_name]).unique()) == len(
             df
         )  # check if the barcodes are unique
-        df["key"] = df[sample_col_name].str.replace(whitespace, "_")
+        df["key"] = df[sample_col_name].str.replace(whitespace, "_", regex=True)
         df = df.set_index("key")
 
         if trim_start_col_name is None and trim_end_col_name is None:
