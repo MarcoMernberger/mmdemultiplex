@@ -4,7 +4,7 @@
 """strategies.py: Contains different demultiplexing strategies."""
 
 from abc import abstractmethod, ABC
-from typing import List, Union, Literal, Optional
+from typing import List, Union, Literal, Optional, Tuple
 from .util import Fragment, Read, reverse_complement
 from .adapters import Adapter
 
@@ -585,3 +585,39 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
         if len(fragment.Read2.Sequence) == 0 or len(fragment.Read1.Sequence) == 0:
             return False
         return self.trim_fragment_to_length(fragment)
+
+
+class PE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
+    """Just Trim the reads"""
+
+    def __init__(
+        self,
+        trim_r1: Tuple[int, int] = (0, 0),
+        trim_r2: Tuple[int, int] = (0, 0),
+    ):
+        self.r1_trim_start = trim_r1[0]
+        self.r2_trim_start = trim_r2[1]
+        self.r1_trim_end = trim_r1[0]
+        self.r2_trim_end = trim_r2[1]
+
+    def get_parameters(self) -> List:
+        return [
+            self.r1_trim_start,
+            self.r2_trim_start,
+            self.r1_trim_end,
+            self.r2_trim_end,
+        ]
+
+    def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        "Returns None, if the fragment does not match and a trimmed fragment otherwise"
+        fragment.Read1 = self.trim_read_front(
+            fragment.Read1, self.r1_trim_start
+        )  # trim start adapter in first read
+        fragment.Read2 = self.trim_read_front(fragment.Read2, self.r2_trim_start)
+        fragment.Read1 = self.trim_read_back(
+            fragment.Read1, len(fragment.Read1.Sequence) - self.r1_trim_end
+        )
+        fragment.Read2 = self.trim_read_back(
+            fragment.Read2, len(fragment.Read2.Sequence) - self.r2_trim_end
+        )
+        return fragment

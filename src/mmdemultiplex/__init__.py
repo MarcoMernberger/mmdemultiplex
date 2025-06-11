@@ -19,6 +19,7 @@ from .strategies import (
     PE_Decide_On_Start_End_Trim_Start_End,
     SE_Decide_On_Start_Trim_Start_End,
     SE_Trim_On_Start_Trim_After_X_BP,
+    PE_Trim_On_Start_Trim_After_X_BP,
 )
 from .util import (
     Fragment,
