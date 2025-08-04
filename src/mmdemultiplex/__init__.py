@@ -27,7 +27,7 @@ from .util import (
     reverse_complement,
     get_fastq_iterator,
 )
-
+from .filterfastq import FastqDemultiplexer, decision_callback_init
 from .samples import DemultiplexInputSample
 from .plots import *
 from .filter import SequenceFilter
