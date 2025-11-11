@@ -10,6 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable, List, Dict, Tuple, Optional
 from mbf.align import Sample
+from mbf.align.fastq import Straight
 from .strategies import (
     DemultiplexStrategy,
     PE_Decide_On_Start_Trim_Start_End,
@@ -176,7 +177,7 @@ class Trimmer:
             sample_name,
             input_strategy=FASTQsFromJobSelect(sample_name, self.trim()),
             reverse_reads=False,
-            fastq_processor=mbf.align.fastq.Straight(),
+            fastq_processor=Straight(),
             pairing=pairing,
             vid=None,
         )

@@ -17,6 +17,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable, List, Dict, Tuple, Optional, Union
 from mbf.align import Sample
+from mbf.align.fastq import Straight
 from .strategies import DemultiplexStrategy, PE_Decide_On_Start_Trim_Start_End
 from .util import Fragment, get_fastq_iterator, TemporaryToPermanent, len_callback
 from pypipegraph import Job, MultiFileGeneratingJob, ParameterInvariant
@@ -261,7 +262,7 @@ class FastqDemultiplexer:
                 sample_name,
                 input_strategy=FASTQsFromJobSelect(sample_name, self.do_demultiplex()),
                 reverse_reads=False,
-                fastq_processor=mbf.align.fastq2.Straight(),
+                fastq_processor=Straight(),
                 pairing=pairing,
                 vid=None,
             )

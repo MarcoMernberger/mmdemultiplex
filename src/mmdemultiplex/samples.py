@@ -6,7 +6,7 @@
 from builtins import NotImplementedError
 from pathlib import Path
 from typing import Optional, Callable, List, Dict, Tuple, Any, Union
-from mbf.align import fastq
+from mbf.align.fastq import Straight
 from mbf.align.strategies import _FASTQsBase
 from pypipegraph import Job, FileChecksumInvariant
 
@@ -23,7 +23,7 @@ class DemultiplexInputSample:
         sample_name: str,
         input_strategy: _FASTQsBase,
         reverse_reads: bool,
-        fastq_processor=fastq.Straight(),
+        fastq_processor=Straight(),
         pairing="paired",
     ):
         self.name = sample_name
