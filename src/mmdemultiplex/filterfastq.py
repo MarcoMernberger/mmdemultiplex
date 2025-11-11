@@ -179,7 +179,9 @@ class FastqDemultiplexer:
         self, files_to_create: Dict[str, Path], sentinel: Path
     ):
 
-        def __dump(filenames, self=self, files_to_create=files_to_create. sentinel=sentinel):
+        def __dump(
+            filenames, self=self, files_to_create=files_to_create, sentinel=sentinel
+        ):
             # open a bunch of temporary files to write to
             with sentinel.open("w") as done:
                 temporary_files = {}
@@ -226,7 +228,9 @@ class FastqDemultiplexer:
         ]
 
         return MultiFileGeneratingJob(
-            filenames, self._do_demultiplex_callable(files_to_create, sentinel), empty_ok=True
+            filenames,
+            self._do_demultiplex_callable(files_to_create, sentinel),
+            empty_ok=True,
         ).depends_on(deps)
 
     def get_files_to_create(self):

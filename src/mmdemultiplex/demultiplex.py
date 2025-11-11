@@ -119,9 +119,13 @@ class Demultiplexer:
         for i, read in enumerate(fragment):
             file_handles[i].write(f"@{read.Name}\n{read.Sequence}\n+\n{read.Quality}\n")
 
-    def _do_demultiplex_callable(self, files_to_create: Dict[str, Path], sentinel: Path):
+    def _do_demultiplex_callable(
+        self, files_to_create: Dict[str, Path], sentinel: Path
+    ):
 
-        def dump(filenames, self=self, sentinel=sentinel, files_to_create):
+        def dump(
+            filenames, self=self, sentinel=sentinel, files_to_create=files_to_create
+        ):
             # open a bunch of temporary files to write to
             with sentinel.open("w") as done:
                 temporary_files = {}
@@ -167,7 +171,11 @@ class Demultiplexer:
             filename for files in files_to_create.values() for filename in files
         ]
 
-        return MultiFileGeneratingJob(filenames, self._do_demultiplex_callable(files_to_create, sentinel), empty_ok=True).depends_on(deps)
+        return MultiFileGeneratingJob(
+            filenames,
+            self._do_demultiplex_callable(files_to_create, sentinel),
+            empty_ok=True,
+        ).depends_on(deps)
 
     def get_files_to_create(self):
         files_to_create = {}
@@ -213,6 +221,7 @@ class Demultiplexer:
         count_adapters counts the starting kmers of the reads in the input files.
         This is to check the actual adapters/barcodes used for demultiplexing.
         """
+
         def __count(output_file, self=self):
             read_iterator = self.get_fastq_iterator()
             counter = Counter()
@@ -235,12 +244,14 @@ class Demultiplexer:
         output_file = (
             self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
         )
-        return FileGeneratingJob(output_file, self._count_adapters_callable(k, most_common), empty_ok=True).depends_on(deps)
+        return FileGeneratingJob(
+            output_file, self._count_adapters_callable(k, most_common), empty_ok=True
+        ).depends_on(deps)
 
     def _divide_reads_callable(
         self,
         decision_callback=len_callback,
-        ):
+    ):
         """
         divide_reads counts the starting kmers of the reads in the input files.
         This is to check the actual adapters/barcodes used for demultiplexing.
@@ -277,7 +288,9 @@ class Demultiplexer:
             new_output_folder / input_files[0][1].name,
         )
         return (
-            MultiFileGeneratingJob(outfiles, self._divide_reads_callable(decision_callback), empty_ok=True)
+            MultiFileGeneratingJob(
+                outfiles, self._divide_reads_callable(decision_callback), empty_ok=True
+            )
             .depends_on(dependencies)
             .depends_on(deps)
         )
