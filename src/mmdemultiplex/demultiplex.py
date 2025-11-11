@@ -10,14 +10,20 @@ sequencing. Demultiplexing can Be defined on Forward barcodes, reverse barcodes
 and a combination of both (in case of paired end reads.
 """
 import mbf
-import pypipegraph as ppg
+
+# import pypipegraph as ppg
 from collections import Counter
 from pathlib import Path
 from typing import Callable, List, Dict, Tuple, Optional
 from mbf.align import Sample
 from .strategies import DemultiplexStrategy, PE_Decide_On_Start_Trim_Start_End
 from .util import Fragment, get_fastq_iterator, TemporaryToPermanent, len_callback
-from pypipegraph import Job
+from pypipegraph import (
+    Job,
+    MultiFileGeneratingJob,
+    FileGeneratingJob,
+    ParameterInvariant,
+)
 from .samples import FASTQsFromJobSelect
 
 __author__ = "Marco Mernberger"
@@ -69,7 +75,7 @@ class Demultiplexer:
 
     def get_dependencies(self) -> List[Job]:
         deps = [
-            ppg.ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
+            ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
         ]
         if hasattr(self.input_sample, "prepare_input"):
             deps.append(self.input_sample.prepare_input())
@@ -113,28 +119,9 @@ class Demultiplexer:
         for i, read in enumerate(fragment):
             file_handles[i].write(f"@{read.Name}\n{read.Sequence}\n+\n{read.Quality}\n")
 
-    def do_demultiplex(self):
-        deps = self.get_dependencies()
-        files_to_create = {}
-        sample_names = [
-            f"{self.name}_{key}" for key in list(self.decision_callbacks.keys())
-        ] + [f"{self.name}_discarded"]
-        for sample_name in sample_names:
-            files_to_create[sample_name] = [
-                self.output_folder / sample_name / f"{sample_name}_R1_.fastq"
-            ]
-            files_to_create[sample_name][0].parent.mkdir(parents=True, exist_ok=True)
-        if self.is_paired:
-            for sample_name in sample_names:
-                files_to_create[sample_name].append(
-                    self.output_folder / sample_name / f"{sample_name}_R2_.fastq"
-                )
-        sentinel = self.output_folder / "done.txt"
-        filenames = [sentinel] + [
-            filename for files in files_to_create.values() for filename in files
-        ]
+    def _do_demultiplex_callable(self, files_to_create: Dict[str, Path], sentinel: Path):
 
-        def dump():
+        def dump(filenames, self=self, sentinel=sentinel, files_to_create):
             # open a bunch of temporary files to write to
             with sentinel.open("w") as done:
                 temporary_files = {}
@@ -157,9 +144,30 @@ class Demultiplexer:
                         f.close()
                 done.write("\ndemultiplexing done")
 
-        return ppg.MultiFileGeneratingJob(filenames, dump, empty_ok=True).depends_on(
-            deps
-        )
+        return dump
+
+    def do_demultiplex(self):
+        deps = self.get_dependencies()
+        files_to_create = {}
+        sample_names = [
+            f"{self.name}_{key}" for key in list(self.decision_callbacks.keys())
+        ] + [f"{self.name}_discarded"]
+        for sample_name in sample_names:
+            files_to_create[sample_name] = [
+                self.output_folder / sample_name / f"{sample_name}_R1_.fastq"
+            ]
+            files_to_create[sample_name][0].parent.mkdir(parents=True, exist_ok=True)
+        if self.is_paired:
+            for sample_name in sample_names:
+                files_to_create[sample_name].append(
+                    self.output_folder / sample_name / f"{sample_name}_R2_.fastq"
+                )
+        sentinel = self.output_folder / "done.txt"
+        filenames = [sentinel] + [
+            filename for files in files_to_create.values() for filename in files
+        ]
+
+        return MultiFileGeneratingJob(filenames, self._do_demultiplex_callable(files_to_create, sentinel), empty_ok=True).depends_on(deps)
 
     def get_files_to_create(self):
         files_to_create = {}
@@ -200,17 +208,12 @@ class Demultiplexer:
             self.raw_samples = self._make_samples()
         return self.raw_samples
 
-    def count_adapters(self, k: int = 10, most_common: Optional[int] = None):
+    def _count_adapters_callable(self, k: int = 10, most_common: Optional[int] = None):
         """
         count_adapters counts the starting kmers of the reads in the input files.
         This is to check the actual adapters/barcodes used for demultiplexing.
         """
-        deps = self.get_dependencies()
-        output_file = (
-            self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
-        )
-
-        def count():
+        def __count(output_file, self=self):
             read_iterator = self.get_fastq_iterator()
             counter = Counter()
             for files_tuple in self.input_files:
@@ -221,7 +224,41 @@ class Demultiplexer:
                 for count in counter.most_common(most_common):
                     outp.write(f"{count[0]}\t{count[1]}\n")
 
-        return ppg.FileGeneratingJob(output_file, count, empty_ok=True).depends_on(deps)
+        return __count
+
+    def count_adapters(self, k: int = 10, most_common: Optional[int] = None):
+        """
+        count_adapters counts the starting kmers of the reads in the input files.
+        This is to check the actual adapters/barcodes used for demultiplexing.
+        """
+        deps = self.get_dependencies()
+        output_file = (
+            self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
+        )
+        return FileGeneratingJob(output_file, self._count_adapters_callable(k, most_common), empty_ok=True).depends_on(deps)
+
+    def _divide_reads_callable(
+        self,
+        decision_callback=len_callback,
+        ):
+        """
+        divide_reads counts the starting kmers of the reads in the input files.
+        This is to check the actual adapters/barcodes used for demultiplexing.
+        """
+
+        def __divide(outfiles, self=self, decision_callback=decision_callback):
+            outfiles[0].parent.mkdir(parents=True, exist_ok=True)
+            read_iterator = self.get_fastq_iterator()
+            temporary_files = [TemporaryToPermanent(f).open("w") for f in outfiles]
+            for files_tuple in input_files:
+                for fragment in read_iterator(files_tuple):
+                    fragment = decision_callback(fragment)
+                    self.__write_fragment(fragment, temporary_files)
+            # close open file handle
+            for f in temporary_files:
+                f.close()
+
+        return __divide
 
     def divide_reads(
         self,
@@ -235,25 +272,12 @@ class Demultiplexer:
         This is to check the actual adapters/barcodes used for demultiplexing.
         """
         deps = self.get_dependencies()
-        new_output_folder.mkdir(parents=True, exist_ok=True)
         outfiles = (
             new_output_folder / input_files[0][0].name,
             new_output_folder / input_files[0][1].name,
         )
-
-        def divide():
-            read_iterator = self.get_fastq_iterator()
-            temporary_files = [TemporaryToPermanent(f).open("w") for f in outfiles]
-            for files_tuple in input_files:
-                for fragment in read_iterator(files_tuple):
-                    fragment = decision_callback(fragment)
-                    self.__write_fragment(fragment, temporary_files)
-            # close open file handle
-            for f in temporary_files:
-                f.close()
-
         return (
-            ppg.MultiFileGeneratingJob(outfiles, divide, empty_ok=True)
+            MultiFileGeneratingJob(outfiles, self._divide_reads_callable(decision_callback), empty_ok=True)
             .depends_on(dependencies)
             .depends_on(deps)
         )

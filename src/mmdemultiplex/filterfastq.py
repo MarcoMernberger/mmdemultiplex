@@ -10,7 +10,8 @@ sequencing. Demultiplexing can Be defined on Forward barcodes, reverse barcodes
 and a combination of both (in case of paired end reads.
 """
 import mbf
-import pypipegraph as ppg
+
+# import pypipegraph as ppg
 import pandas as pd
 from collections import Counter
 from pathlib import Path
@@ -18,7 +19,7 @@ from typing import Callable, List, Dict, Tuple, Optional, Union
 from mbf.align import Sample
 from .strategies import DemultiplexStrategy, PE_Decide_On_Start_Trim_Start_End
 from .util import Fragment, get_fastq_iterator, TemporaryToPermanent, len_callback
-from pypipegraph import Job
+from pypipegraph import Job, MultiFileGeneratingJob, ParameterInvariant
 from .samples import FASTQsFromJobSelect
 
 
@@ -141,7 +142,7 @@ class FastqDemultiplexer:
 
     def get_dependencies(self) -> List[Job]:
         deps = [
-            ppg.ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
+            ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
         ] + self.dependencies
 
         if hasattr(self.input_sample, "prepare_input"):
@@ -174,28 +175,11 @@ class FastqDemultiplexer:
         for i, read in enumerate(fragment):
             file_handles[i].write(f"@{read.Name}\n{read.Sequence}\n+\n{read.Quality}\n")
 
-    def do_demultiplex(self):
-        deps = self.get_dependencies()
-        files_to_create = {}
-        sample_names = [
-            f"{self.name}_{key}" for key in list(self.decision_callbacks.keys())
-        ] + [f"{self.name}_discarded"]
-        for sample_name in sample_names:
-            files_to_create[sample_name] = [
-                self.output_folder / sample_name / f"{sample_name}_R1_.fastq"
-            ]
-            files_to_create[sample_name][0].parent.mkdir(parents=True, exist_ok=True)
-        if self.is_paired:
-            for sample_name in sample_names:
-                files_to_create[sample_name].append(
-                    self.output_folder / sample_name / f"{sample_name}_R2_.fastq"
-                )
-        sentinel = self.output_folder / "done.txt"
-        filenames = [sentinel] + [
-            filename for files in files_to_create.values() for filename in files
-        ]
+    def _do_demultiplex_callable(
+        self, files_to_create: Dict[str, Path], sentinel: Path
+    ):
 
-        def dump():
+        def __dump(filenames, self=self, files_to_create=files_to_create. sentinel=sentinel):
             # open a bunch of temporary files to write to
             with sentinel.open("w") as done:
                 temporary_files = {}
@@ -218,9 +202,32 @@ class FastqDemultiplexer:
                         f.close()
                 done.write("\ndemultiplexing done")
 
-        return ppg.MultiFileGeneratingJob(filenames, dump, empty_ok=True).depends_on(
-            deps
-        )
+        return __dump
+
+    def do_demultiplex(self):
+        deps = self.get_dependencies()
+        files_to_create = {}
+        sample_names = [
+            f"{self.name}_{key}" for key in list(self.decision_callbacks.keys())
+        ] + [f"{self.name}_discarded"]
+        for sample_name in sample_names:
+            files_to_create[sample_name] = [
+                self.output_folder / sample_name / f"{sample_name}_R1_.fastq"
+            ]
+            files_to_create[sample_name][0].parent.mkdir(parents=True, exist_ok=True)
+        if self.is_paired:
+            for sample_name in sample_names:
+                files_to_create[sample_name].append(
+                    self.output_folder / sample_name / f"{sample_name}_R2_.fastq"
+                )
+        sentinel = self.output_folder / "done.txt"
+        filenames = [sentinel] + [
+            filename for files in files_to_create.values() for filename in files
+        ]
+
+        return MultiFileGeneratingJob(
+            filenames, self._do_demultiplex_callable(files_to_create, sentinel), empty_ok=True
+        ).depends_on(deps)
 
     def get_files_to_create(self):
         files_to_create = {}

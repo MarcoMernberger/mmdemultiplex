@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 import tempfile
 import shutil
 import collections
-import mbf
+import gzip, bz2
 import re
 
 try:
@@ -192,8 +192,17 @@ def get_df_callable_for_demultiplexer(
     return call
 
 
+def _open_auto(filename: str):
+    if filename.endswith(".gz"):
+        return gzip.open(filename, "rb")
+    if filename.endswith(".bz2"):
+        return bz2.open(filename, "rb")
+    return open(filename, "rb", buffering=4 * 1024 * 1024)  # großer Buffer
+
+
 def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
-    op = mbf.align._common.BlockedFileAdaptor(filename)
+    # op = mbf.align._common.BlockedFileAdaptor(filename)
+    op = _open_auto(filename)
     while True:
         try:
             name = op.readline()[1:-1].decode()
