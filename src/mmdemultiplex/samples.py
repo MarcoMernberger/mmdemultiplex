@@ -6,10 +6,11 @@
 from builtins import NotImplementedError
 from pathlib import Path
 from typing import Optional, Callable, List, Dict, Tuple, Any, Union
-from mbf.align import fastq2
+from mbf.align.fastq import Straight
 from mbf.align.strategies import _FASTQsBase
-from pypipegraph import Job
-import pypipegraph as ppg
+from pypipegraph import Job, FileChecksumInvariant
+
+# import pypipegraph as ppg
 
 __author__ = "Marco Mernberger"
 __copyright__ = "Copyright (c) 2020 Marco Mernberger"
@@ -22,7 +23,7 @@ class DemultiplexInputSample:
         sample_name: str,
         input_strategy: _FASTQsBase,
         reverse_reads: bool,
-        fastq_processor=fastq2.Straight(),
+        fastq_processor=Straight(),
         pairing="paired",
     ):
         self.name = sample_name
@@ -60,7 +61,7 @@ class DemultiplexInputSample:
         if hasattr(self.input_strategy, "dependencies"):
             deps = self.input_strategy.dependencies
         else:
-            deps = [ppg.FileChecksumInvariant(f) for f in flat_input_filenames]
+            deps = [FileChecksumInvariant(f) for f in flat_input_filenames]
         self.input_filenames = input_filenames
         self.dependencies.extend(deps)
 

@@ -2,17 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """util.py: Contains utility functions for the demultiplexer package."""
-from .demultiplex import Demultiplexer
 import subprocess
 import pandas as pd
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import pypipegraph as ppg
+
+# import pypipegraph as ppg
 import numpy as np
 
 # from mplots import MPPlotJob
+from pypipegraph import MultiFileGeneratingJob, Job
+from .demultiplex import Demultiplexer
+from typing import Union, List
 
 
 def count_raw_input_reads(gz_filename1):
@@ -32,19 +35,10 @@ def count_raw_input_reads(gz_filename1):
             return x
 
 
-def plot_read_counts(demultiplexer_or_list, outfile, dependencies=[], log=True):
-    outfile_df = outfile + ".tsv"
-    demultiplexer = demultiplexer_or_list
-    deps = []
-    if isinstance(demultiplexer_or_list, Demultiplexer):
-        demultiplexer = [demultiplexer]
-    for dm in demultiplexer:
-        deps.append(dm.do_demultiplex())
-        deps.append(dm.input_sample.prepare_input())
-        for sample in dm.get_samples().values():
-            deps.append(sample.prepare_input())
+def plot_read_counts_callable(demultiplexer: List[Demultiplexer], log: bool = True):
 
-    def __count():
+    def __count(filenames, demultiplexer=demultiplexer, log=log):
+        outfile, outfile_df = filenames
         samples_to_plot = []
         color = []
         for dm in demultiplexer:
@@ -56,7 +50,9 @@ def plot_read_counts(demultiplexer_or_list, outfile, dependencies=[], log=True):
                 color.append("c")
         tmp = {"Sample": [], "Count": []}
         for sample in samples_to_plot:
-            read_count = count_raw_input_reads(str(sample.get_aligner_input_filenames()[0]))
+            read_count = count_raw_input_reads(
+                str(sample.get_aligner_input_filenames()[0])
+            )
             tmp["Sample"].append(sample.name)
             tmp["Count"].append(read_count)
         df = pd.DataFrame(tmp)
@@ -74,12 +70,29 @@ def plot_read_counts(demultiplexer_or_list, outfile, dependencies=[], log=True):
         plt.tight_layout()
         fig.savefig(outfile)
 
-    return ppg.MultiFileGeneratingJob([outfile, outfile_df], __count).depends_on(
-        dependencies + deps
-    )
+    return __count
 
 
-def plot_read_counts_percentage(demultiplexer_or_list, outfile, dependencies=[], log=True):
+def plot_read_counts(demultiplexer_or_list, outfile, dependencies=[], log=True):
+    outfile_df = outfile + ".tsv"
+    demultiplexer = demultiplexer_or_list
+    deps = []
+    if isinstance(demultiplexer_or_list, Demultiplexer):
+        demultiplexer = [demultiplexer]
+    for dm in demultiplexer:
+        deps.append(dm.do_demultiplex())
+        deps.append(dm.input_sample.prepare_input())
+        for sample in dm.get_samples().values():
+            deps.append(sample.prepare_input())
+    return MultiFileGeneratingJob(
+        [outfile, outfile_df],
+        plot_read_counts_callable(demultiplexer, log),
+    ).depends_on(dependencies + deps)
+
+
+def plot_read_counts_percentage(
+    demultiplexer_or_list, outfile, dependencies=[], log=True
+):
     demultiplexer = demultiplexer_or_list
     deps = []
     if isinstance(demultiplexer_or_list, Demultiplexer):
@@ -105,7 +118,9 @@ def plot_read_counts_percentage(demultiplexer_or_list, outfile, dependencies=[],
             dm_samples = dm.get_samples()
             for dm_sample_name in dm_samples:
                 sample = dm_samples[dm_sample_name]
-                read_count = count_raw_input_reads(str(sample.get_aligner_input_filenames()[0]))
+                read_count = count_raw_input_reads(
+                    str(sample.get_aligner_input_filenames()[0])
+                )
                 perc = 100 * (float(read_count) / read_count_100)
                 tmp["Color"].append("c")
                 tmp["Sample"].append(sample.name)

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-demultiplex.py: This contains a Demultiplexer class that is used for
+filterfastq.py: This module has a class to filter fastqs that is used for
 demultiplexing fastqs. It offers the option to find barcodes within the sequences,
 thereby removing trailing sequences. In addition, it can trim fixed length
 sequences after the detected barcode. Can be applied to single end paired end
@@ -12,101 +12,157 @@ and a combination of both (in case of paired end reads.
 import mbf
 
 # import pypipegraph as ppg
+import pandas as pd
 from collections import Counter
 from pathlib import Path
-from typing import Callable, List, Dict, Tuple, Optional
+from typing import Callable, List, Dict, Tuple, Optional, Union
 from mbf.align import Sample
 from mbf.align.fastq import Straight
 from .strategies import DemultiplexStrategy, PE_Decide_On_Start_Trim_Start_End
 from .util import Fragment, get_fastq_iterator, TemporaryToPermanent, len_callback
-from pypipegraph import (
-    Job,
-    MultiFileGeneratingJob,
-    FileGeneratingJob,
-    ParameterInvariant,
-)
+from pypipegraph import Job, MultiFileGeneratingJob, ParameterInvariant
 from .samples import FASTQsFromJobSelect
+
 
 __author__ = "Marco Mernberger"
 __copyright__ = "Copyright (c) 2020 Marco Mernberger"
 __license__ = "mit"
 
 
-class Demultiplexer:
+def decision_callback_init(input_dataframe: Path) -> Callable:
+    """
+    This function generates a bunch of decision_callbacks and returns a dictionary
+    of those to be used in the FasqDemultiplexer below.
+
+    Parameters
+    ----------
+    input_dataframe : Path
+        The path to a dataframe.
+
+    Returns
+    -------
+    Dict[str, Callable]
+        A dictionary of callables that decide on acceptance of a fragment.
+    """
+
+    def __callback_init():
+        def decide(sequenced_sgRNAs_sensors):
+            def __callback(fragment: Fragment):
+                """
+                This function decides on acceptance of a fragment based on the sequenced sensors and sgRNAs.
+                """
+                accepted = (
+                    fragment.Read1.Sequence,
+                    fragment.Read2.Sequence,
+                ) in sequenced_sgRNAs_sensors
+                return accepted, fragment
+
+            return __callback
+
+        decision_callbacks = {}
+        df = pd.read_csv(input_dataframe, sep="\t")
+        for key, df_sub in df.groupby("ID"):
+            sequenced_sgRNAs_sensors = dict(
+                [
+                    ((sg, sensor), key)
+                    for sg, sensor in zip(
+                        df_sub["sequenced sgRNA"], df_sub["sequenced Sensor"]
+                    )
+                ]
+            )
+            decision_callbacks[key] = decide(sequenced_sgRNAs_sensors)
+        return decision_callbacks
+
+    return __callback_init
+
+
+class FastqDemultiplexer:
+
     def __init__(
         self,
-        sample: Sample,
-        barcode_df_callback: Callable,
-        strategy: DemultiplexStrategy = PE_Decide_On_Start_Trim_Start_End,
+        decision_callback_init: Callable,
+        fastq_input: Union[Path, Tuple[Path], Sample],
         output_folder: Optional[Path] = None,
         prefix: str = "",
         filter_callable: Callable = None,
+        dependencies: List[Job] = [],
+        name: Optional[str] = None,
     ):
-        self.barcode_df = barcode_df_callback()
-        self.name = f"{prefix}{sample.name}"
-        self.library_name = sample.name
+        self.name = name
+        self.decision_callback_init = decision_callback_init
+        self.fastq_input = fastq_input
+        self.prefix = prefix
+        self.__init_files()
         if output_folder is None:
             self.output_folder = Path("cache") / self.name
         else:
             self.output_folder = output_folder / self.name
         self.output_folder.mkdir(parents=True, exist_ok=True)
-        self.input_sample = sample
-        self.input_files = self.input_sample.get_aligner_input_filenames()
-        self.is_paired = self.input_sample.is_paired
-        if isinstance(self.input_files, Tuple):
-            self.input_files = [self.input_files]
-        elif isinstance(self.input_files, List) and isinstance(
-            self.input_files[0], str
-        ):
-            self.input_files = [(x,) for x in self.input_files]
-        self.strategy = strategy
         self.__initialize_decision_callbacks()
-        self.__check_pairing()
+        # self.__check_pairing()
         self.filter_func = filter_callable
         if self.filter_func is None:
             self._decide_for_fragment = self._decide_on_barcode
         else:
             self._decide_for_fragment = self._decide_on_barcode_and_filter
+        self.parameters = [fastq_input, output_folder, prefix]
+        self.dependencies = dependencies
 
-    def __check_pairing(self):
-        if self.is_paired and str(self.strategy.__class__).startswith("SE"):
-            raise AttributeError("Strategy is not compatible with paired end reads")
-        elif not self.is_paired and str(self.strategy.__class__).startswith("PE"):
-            raise AttributeError("Strategy is not compatible with single end reads")
+    def __init_files(self):
+        if isinstance(self.fastq_input, Sample):
+            self.input_sample = self.fastq_input
+            self.input_files = self.input_sample.get_aligner_input_filenames()
+            self.is_paired = self.input_sample.is_paired
+            name = f"{self.prefix}{self.input_sample.name}"
+            self.library_name = self.input_sample.name
+            if isinstance(self.input_files, Tuple):
+                self.input_files = [self.input_files]
+            elif isinstance(self.input_files, List) and isinstance(
+                self.input_files[0], str
+            ):
+                self.input_files = [(x,) for x in self.input_files]
+        elif isinstance(self.fastq_input, Path):
+            self.input_sample = None
+            self.input_files = [self.fastq_input]
+            self.is_paired = False
+            self.library_name = self.fastq_input.stem
+            name = f"{self.prefix}{self.library_name}"
+        elif isinstance(self.fastq_input, Tuple):
+            self.input_sample = None
+            self.input_files = [self.fastq_input]
+            self.is_paired = len(self.fastq_input) == 2
+            self.library_name = self.fastq_input[0].stem
+            name = f"{self.prefix}{self.library_name}"
+        else:
+            raise NotImplementedError(
+                f"Input type {type(self.fastq_input)} not supported. "
+                "Please provide a Sample, Path or Tuple of Paths."
+            )
+        if self.name is None:
+            self.name = name
 
     def get_dependencies(self) -> List[Job]:
         deps = [
             ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
-        ]
+        ] + self.dependencies
+
         if hasattr(self.input_sample, "prepare_input"):
             deps.append(self.input_sample.prepare_input())
         if hasattr(self.input_sample, "dependencies"):
             deps.extend(self.input_sample.dependencies)
         return deps
 
-    @property
-    def parameters(self) -> List[str]:
-        return [self.name, self.input_sample.name, self.strategy.__name__]
-
-    def parameter_string(self) -> str:
-        ret = f"{self.name}\nLibrary: {self.input_sample.name}\nDemultiplexStrategy: {self.strategy}\nBarcodeDastaFrame:\n"
-        ret += self.barcode_df.to_string()
-        return ret
-
     def __initialize_decision_callbacks(self) -> None:
-        self.decision_callbacks = {}
-        for key, df_1_row in self.barcode_df.iterrows():
-            parameters = df_1_row.to_dict()
-            self.decision_callbacks[key] = self.strategy(**parameters)
+        self.decision_callbacks = self.decision_callback_init()
 
     def get_fastq_iterator(self) -> Callable:
         return get_fastq_iterator(self.is_paired)
 
     def _decide_on_barcode(self, fragment: Fragment):
         for key in self.decision_callbacks:
-            accepted = self.decision_callbacks[key].match_and_trim(fragment.copy())
+            accepted, fragment = self.decision_callbacks[key](fragment)
             if accepted:
-                return key, accepted
+                return key, fragment
         return "discarded", fragment
 
     def _decide_on_barcode_and_filter(self, fragment: Fragment):
@@ -124,13 +180,13 @@ class Demultiplexer:
         self, files_to_create: Dict[str, Path], sentinel: Path
     ):
 
-        def dump(
-            filenames, self=self, sentinel=sentinel, files_to_create=files_to_create
+        def __dump(
+            filenames, self=self, files_to_create=files_to_create, sentinel=sentinel
         ):
             # open a bunch of temporary files to write to
             with sentinel.open("w") as done:
                 temporary_files = {}
-                done.write(self.parameter_string())
+                # done.write(self.parameter_string())
                 for sample_name in files_to_create:
                     temporary_files[sample_name] = [
                         TemporaryToPermanent(f).open("w")
@@ -149,7 +205,7 @@ class Demultiplexer:
                         f.close()
                 done.write("\ndemultiplexing done")
 
-        return dump
+        return __dump
 
     def do_demultiplex(self):
         deps = self.get_dependencies()
@@ -216,82 +272,3 @@ class Demultiplexer:
         if not hasattr(self, "raw_samples"):
             self.raw_samples = self._make_samples()
         return self.raw_samples
-
-    def _count_adapters_callable(self, k: int = 10, most_common: Optional[int] = None):
-        """
-        count_adapters counts the starting kmers of the reads in the input files.
-        This is to check the actual adapters/barcodes used for demultiplexing.
-        """
-
-        def __count(output_file, self=self):
-            read_iterator = self.get_fastq_iterator()
-            counter = Counter()
-            for files_tuple in self.input_files:
-                for fragment in read_iterator(files_tuple):
-                    for read in fragment:
-                        counter[read.Sequence[:k]] += 1
-            with output_file.open("w") as outp:
-                for count in counter.most_common(most_common):
-                    outp.write(f"{count[0]}\t{count[1]}\n")
-
-        return __count
-
-    def count_adapters(self, k: int = 10, most_common: Optional[int] = None):
-        """
-        count_adapters counts the starting kmers of the reads in the input files.
-        This is to check the actual adapters/barcodes used for demultiplexing.
-        """
-        deps = self.get_dependencies()
-        output_file = (
-            self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
-        )
-        return FileGeneratingJob(
-            output_file, self._count_adapters_callable(k, most_common), empty_ok=True
-        ).depends_on(deps)
-
-    def _divide_reads_callable(
-        self,
-        decision_callback=len_callback,
-    ):
-        """
-        divide_reads counts the starting kmers of the reads in the input files.
-        This is to check the actual adapters/barcodes used for demultiplexing.
-        """
-
-        def __divide(outfiles, self=self, decision_callback=decision_callback):
-            outfiles[0].parent.mkdir(parents=True, exist_ok=True)
-            read_iterator = self.get_fastq_iterator()
-            temporary_files = [TemporaryToPermanent(f).open("w") for f in outfiles]
-            for files_tuple in input_files:
-                for fragment in read_iterator(files_tuple):
-                    fragment = decision_callback(fragment)
-                    self.__write_fragment(fragment, temporary_files)
-            # close open file handle
-            for f in temporary_files:
-                f.close()
-
-        return __divide
-
-    def divide_reads(
-        self,
-        input_files: List[Tuple[Path, Path]],
-        decision_callback=len_callback,
-        new_output_folder=Path("results/demultiplexed/divided"),
-        dependencies=[],
-    ):
-        """
-        divide_reads counts the starting kmers of the reads in the input files.
-        This is to check the actual adapters/barcodes used for demultiplexing.
-        """
-        deps = self.get_dependencies()
-        outfiles = (
-            new_output_folder / input_files[0][0].name,
-            new_output_folder / input_files[0][1].name,
-        )
-        return (
-            MultiFileGeneratingJob(
-                outfiles, self._divide_reads_callable(decision_callback), empty_ok=True
-            )
-            .depends_on(dependencies)
-            .depends_on(deps)
-        )
