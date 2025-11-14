@@ -97,7 +97,7 @@ class Demultiplexer:
 
     def _decide_on_barcode(self, fragment: Fragment):
         for key in self.decision_callbacks:
-            accepted = self.decision_callbacks[key].match_and_trim(fragment)
+            accepted = self.decision_callbacks[key].match_and_trim(fragment.copy())
             if accepted:
                 return key, accepted
         return "discarded", fragment

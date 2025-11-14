@@ -540,8 +540,19 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
 
     def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
         "Returns None, if the fragment does not match and a trimmed fragment otherwise"
+
         start_in_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
         start_in_r2 = self.adapter_start_forward.locate(fragment.Read2.Sequence)
+        if "M03491:45:000000000-GT86M:1:1101:14198:1505" in fragment.Read1.Name:
+            print(
+                "Entered",
+                self.start_barcode,
+                self.end_barcode,
+                start_in_r1,
+                start_in_r2,
+            )
+            print(fragment.Read1.Sequence)
+            print(fragment.Read2.Sequence)
         if start_in_r1 is None and start_in_r2 is None:
             # start adapter nowhere to be found, discard
             return False
@@ -571,6 +582,9 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
         )
         # accept fragment, both adapters are found
         # trim reverse adapters at the end of reads
+        if "M03491:45:000000000-GT86M:1:1101:14198:1505" in fragment.Read1.Name:
+            print("Here")
+
         end_reverse_in_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
         if end_reverse_in_r1 is not None:
             # that means there is something to trim and it will not leave an empty string (end_reverse_in_r1 == 0)
@@ -584,4 +598,7 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
             )
         if len(fragment.Read2.Sequence) == 0 or len(fragment.Read1.Sequence) == 0:
             return False
+        if "M03491:45:000000000-GT86M:1:1101:14198:1505" in fragment.Read1.Name:
+            print("not discarded")
+
         return self.trim_fragment_to_length(fragment)
