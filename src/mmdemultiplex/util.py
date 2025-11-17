@@ -153,6 +153,7 @@ def get_df_callable_for_demultiplexer(
     trim_start_col_name: Optional[str] = None,
     trim_end_col_name: Optional[str] = None,
 ) -> DataFrame:
+
     def call():
         df = df_in.copy()
         df[fw_col_name].fillna("", inplace=True)
@@ -186,9 +187,10 @@ def get_df_callable_for_demultiplexer(
                     trim_end_col_name: "trim_before_end",
                 }
             )
-            return df[
+            ret = df[
                 ["start_barcode", "end_barcode", "trim_after_start", "trim_before_end"]
             ]
+            return ret
 
     return call
 
