@@ -11,11 +11,103 @@ import matplotlib.pyplot as plt
 
 # import pypipegraph as ppg
 import numpy as np
+import seaborn as sns
 
 # from mplots import MPPlotJob
 from pypipegraph import MultiFileGeneratingJob, Job
 from .demultiplex import Demultiplexer
-from typing import Union, List
+from typing import Union, List, Optional
+from pathlib import Path
+
+
+def make_adapter_heatmap(
+    matrix_tsv: Union[str, Path],
+    out_file: Union[str, Path],
+    value_column: str = "both",
+    log10: bool = True,
+    figsize: tuple = (10, 8),
+    dpi: int = 150,
+    cmap: str = "viridis",
+    annot: bool = False,
+    annot_fmt: str = "g",
+    vmax: Optional[float] = None,
+):
+    """
+    Erzeugt eine Heatmap der Barcode-Kombinationen aus der
+    adapter_check_matrix_main.tsv.
+
+    Parameter
+    ---------
+    matrix_tsv : str | Path
+        Pfad zu der TSV-Datei, die von _adapter_check_matrix_main.tsv erzeugt wurde.
+        Erwartete Spalten: start_barcode, end_barcode, <value_column>, ...
+    out_file : str | Path
+        Pfad zur Output-Grafik (z.B. 'heatmap.png' oder 'heatmap.pdf').
+    value_column : str, default 'both'
+        Welche Metrik aus der Matrix-Datei geplottet werden soll
+        (z.B. 'both', 'any', 'expected', 'swapped', ...).
+    log10 : bool, default True
+        Wenn True, werden die Werte mit log10(value+1) transformiert,
+        was oft sinnvoll ist, wenn die Counts stark streuen.
+    figsize : tuple, default (10, 8)
+        Größe der Figure in Zoll.
+    dpi : int, default 150
+        Auflösung der gespeicherten Grafik.
+    cmap : str, default 'viridis'
+        Farbskala für die Heatmap.
+    annot : bool, default False
+        Wenn True, werden die Werte in die Zellen geschrieben.
+        (Vorsicht bei großen Matrizen.)
+    annot_fmt : str, default 'g'
+        Format-String für die Annotation.
+    vmax : float | None, default None
+        Optionaler Maximalwert für die Farbskalierung.
+    """
+    matrix_tsv = Path(matrix_tsv)
+    out_file = Path(out_file)
+
+    if not matrix_tsv.exists():
+        raise FileNotFoundError(f"Matrix file not found: {matrix_tsv}")
+
+    df = pd.read_csv(matrix_tsv, sep="\t")
+
+    required_cols = {"start_barcode", "end_barcode", value_column}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns in matrix file: {', '.join(sorted(missing))}")
+
+    # Pivot: Zeilen = start_barcode, Spalten = end_barcode
+    mat = df.pivot_table(
+        index="start_barcode",
+        columns="end_barcode",
+        values=value_column,
+        aggfunc="sum",
+        fill_value=0,
+    )
+
+    if log10:
+        # log10(value + 1), um mit 0 klarzukommen
+        mat_plot = np.log10(mat + 1)
+    else:
+        mat_plot = mat
+
+    plt.figure(figsize=figsize)
+    sns.heatmap(
+        mat_plot,
+        cmap=cmap,
+        annot=annot,
+        fmt=annot_fmt,
+        cbar=True,
+        vmax=vmax,
+    )
+    plt.title(f"Barcode heatmap ({value_column}{' (log10)' if log10 else ''})")
+    plt.xlabel("end_barcode")
+    plt.ylabel("start_barcode")
+    plt.tight_layout()
+
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_file, dpi=dpi)
+    plt.close()
 
 
 def count_raw_input_reads(gz_filename1):

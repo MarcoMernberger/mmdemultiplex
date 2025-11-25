@@ -8,6 +8,7 @@ from typing import Optional, Callable, Tuple
 from pandas import DataFrame
 from dataclasses import dataclass, replace
 from mbf.align._common import BlockedFileAdaptor
+from numpy import inf
 import tempfile
 import shutil
 import collections
@@ -85,6 +86,10 @@ class Fragment:
     def __str__(self):
         return f"{self.Read1}\n{self.Read2}\n"
 
+    @property
+    def Name(self) -> str:
+        return self.Read1.Name.split()[0]
+
 
 class TemporaryToPermanent:
     def __init__(self, permanent_file: Path):
@@ -152,6 +157,8 @@ def get_df_callable_for_demultiplexer(
     sample_col_name: str,
     trim_start_col_name: Optional[str] = None,
     trim_end_col_name: Optional[str] = None,
+    max_error_start: Optional[str] = None,
+    max_error_end: Optional[str] = None,
 ) -> DataFrame:
 
     def call():
@@ -168,29 +175,17 @@ def get_df_callable_for_demultiplexer(
         )  # check if the barcodes are unique
         df["key"] = df[sample_col_name].str.replace(whitespace, "_", regex=True)
         df = df.set_index("key")
-
-        if trim_start_col_name is None and trim_end_col_name is None:
-            df = df.rename(
-                columns={
-                    fw_col_name: "start_barcode",
-                    rv_col_name: "end_barcode",
-                }
-            )
-            return df[["start_barcode", "end_barcode"]]
-
-        else:
-            df = df.rename(
-                columns={
-                    fw_col_name: "start_barcode",
-                    rv_col_name: "end_barcode",
-                    trim_start_col_name: "trim_after_start",
-                    trim_end_col_name: "trim_before_end",
-                }
-            )
-            ret = df[
-                ["start_barcode", "end_barcode", "trim_after_start", "trim_before_end"]
-            ]
-            return ret
+        df = df.rename(
+            columns={
+                fw_col_name: "start_barcode",
+                rv_col_name: "end_barcode",
+                trim_start_col_name: "trim_after_start",
+                trim_end_col_name: "trim_before_end",
+                max_error_start: "maximal_errors_start",
+                max_error_end: "maximal_errors_end",
+            }
+        )
+        return df
 
     return call
 
@@ -258,3 +253,32 @@ def create_fragment(sequences, qualities=None, names=None):
     ]
     fragment = Fragment(*reads)
     return fragment
+
+
+def dump_matching_reads(
+    incoming_reads_file: Path,
+    outfile: Path,
+    r1: Path,
+    r2: Path = None,
+    max_reads: Optional[int] = None,
+):
+    if max_reads is None:
+        maxc = inf
+    else:
+        maxc = max_reads
+    if r2 is None:
+        iterator = get_fastq_iterator(False)
+    else:
+        iterator = get_fastq_iterator(True)
+    with incoming_reads_file.open("r") as inp:
+        list_of_reads = dict.fromkeys([x.split()[0][1:] for x in inp.readlines()], "")
+        with outfile.open("w") as op:
+            counter = 0
+            for fragment in iterator((r1, r2)):
+                if fragment.Name in list_of_reads:
+                    op.write(
+                        f"{fragment.Name}\n{'_'.join([r.Sequence for r in fragment.reads])}\n"
+                    )
+                    counter += 1
+                if counter >= maxc:
+                    break

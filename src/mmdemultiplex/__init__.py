@@ -27,8 +27,10 @@ from .util import (
     get_df_callable_for_demultiplexer,
     reverse_complement,
     get_fastq_iterator,
+    dump_matching_reads,
 )
 from .filterfastq import FastqDemultiplexer, decision_callback_init
 from .samples import DemultiplexInputSample
 from .plots import *
 from .filter import SequenceFilter
+from .jobs import dump_matching_reads_job, plot_adapter_heatmap

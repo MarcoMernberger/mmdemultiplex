@@ -53,6 +53,47 @@ class DemultiplexStrategy(ABC):
                 read, trim_length
             )  # trim first read to specified length
         return read
+    
+
+class PairedDemultiplexStrategy(DemultiplexStrategy):
+
+    def locate_count(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        "Returns None, if the fragment does not match and a position otherwise"
+        b1_fwd_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
+        b2_fwd_r1 = self.adapter_end_forward.locate(fragment.Read1.Sequence)
+        b1_rev_r1 = self.adapter_start_reverse.locate(fragment.Read1.Sequence)
+        b2_rev_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
+        b1_fwd_r2 = self.adapter_start_forward.locate(fragment.Read2.Sequence)
+        b2_fwd_r2 = self.adapter_end_forward.locate(fragment.Read2.Sequence)
+        b1_rev_r2 = self.adapter_start_reverse.locate(fragment.Read2.Sequence)
+        b2_rev_r2 = self.adapter_end_reverse.locate(fragment.Read2.Sequence)
+        ret = (
+            b1_fwd_r1,
+            b2_fwd_r1,
+            b1_rev_r1,
+            b2_rev_r1,
+            b1_fwd_r2,
+            b2_fwd_r2,
+            b1_rev_r2,
+            b2_rev_r2,
+        )
+        print(ret)
+        return ret
+
+class SingleDemultiplexStrategy(DemultiplexStrategy):
+
+    def locate_count(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        "Returns None, if the fragment does not match and a position otherwise"
+        b1_fwd_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
+        b2_fwd_r1 = self.adapter_end_forward.locate(fragment.Read1.Sequence)
+        b1_rev_r1 = self.adapter_start_reverse.locate(fragment.Read1.Sequence)
+        b2_rev_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
+        return [
+            b1_fwd_r1,
+            b2_fwd_r1,
+            b1_rev_r1,
+            b2_rev_r1,
+        ]
 
 
 class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
@@ -456,7 +497,7 @@ class SE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
             return fragment
 
 
-class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
+class PE_Decide_On_Start_End_Trim_Start_End(PairedDemultiplexStrategy):
     """The start barcode and end barcode are is relevant"""
 
     def __init__(
@@ -543,16 +584,6 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
 
         start_in_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
         start_in_r2 = self.adapter_start_forward.locate(fragment.Read2.Sequence)
-        if "M03491:45:000000000-GT86M:1:1101:14198:1505" in fragment.Read1.Name:
-            print(
-                "Entered",
-                self.start_barcode,
-                self.end_barcode,
-                start_in_r1,
-                start_in_r2,
-            )
-            print(fragment.Read1.Sequence)
-            print(fragment.Read2.Sequence)
         if start_in_r1 is None and start_in_r2 is None:
             # start adapter nowhere to be found, discard
             return False
@@ -582,8 +613,6 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
         )
         # accept fragment, both adapters are found
         # trim reverse adapters at the end of reads
-        if "M03491:45:000000000-GT86M:1:1101:14198:1505" in fragment.Read1.Name:
-            print("Here")
 
         end_reverse_in_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
         if end_reverse_in_r1 is not None:
@@ -602,7 +631,7 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
             print("not discarded")
 
         return self.trim_fragment_to_length(fragment)
-
+    
 
 class PE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
     """Just Trim the reads"""

@@ -397,3 +397,5 @@ def test_divide_reads(tmp_path, pe_sample):
     )
     for fragment in demultiplexer.get_fastq_iterator()(outfiles):
         assert len(fragment.Read1.Sequence) >= len(fragment.Read2.Sequence)
+
+
