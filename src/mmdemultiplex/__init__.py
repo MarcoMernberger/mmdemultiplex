@@ -20,6 +20,7 @@ from .strategies import (
     SE_Decide_On_Start_Trim_Start_End,
     SE_Trim_On_Start_Trim_After_X_BP,
     PE_Trim_On_Start_Trim_After_X_BP,
+    PE_Decide_On_Start_End_Trim_Start_End_Force_Barcode_at_Front,
 )
 from .util import (
     Fragment,
@@ -34,3 +35,4 @@ from .samples import DemultiplexInputSample
 from .plots import *
 from .filter import SequenceFilter
 from .jobs import dump_matching_reads_job, plot_adapter_heatmap
+from .adapters import Adapter
