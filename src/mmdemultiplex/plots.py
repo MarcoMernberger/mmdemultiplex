@@ -74,7 +74,9 @@ def make_adapter_heatmap(
     required_cols = {"start_barcode", "end_barcode", value_column}
     missing = required_cols - set(df.columns)
     if missing:
-        raise ValueError(f"Missing required columns in matrix file: {', '.join(sorted(missing))}")
+        raise ValueError(
+            f"Missing required columns in matrix file: {', '.join(sorted(missing))}"
+        )
 
     # Pivot: Zeilen = start_barcode, Spalten = end_barcode
     mat = df.pivot_table(
@@ -84,7 +86,9 @@ def make_adapter_heatmap(
         aggfunc="sum",
         fill_value=0,
     )
-
+    row_order = df["start_barcode"].unique()
+    col_order = df["end_barcode"].unique()
+    mat = mat.reindex(index=row_order, columns=col_order, fill_value=0)
     if log10:
         # log10(value + 1), um mit 0 klarzukommen
         mat_plot = np.log10(mat + 1)

@@ -53,7 +53,7 @@ class DemultiplexStrategy(ABC):
                 read, trim_length
             )  # trim first read to specified length
         return read
-    
+
 
 class PairedDemultiplexStrategy(DemultiplexStrategy):
 
@@ -68,17 +68,17 @@ class PairedDemultiplexStrategy(DemultiplexStrategy):
         b1_rev_r2 = self.adapter_start_reverse.locate(fragment.Read2.Sequence)
         b2_rev_r2 = self.adapter_end_reverse.locate(fragment.Read2.Sequence)
         ret = (
-            b1_fwd_r1,
-            b2_fwd_r1,
-            b1_rev_r1,
-            b2_rev_r1,
-            b1_fwd_r2,
-            b2_fwd_r2,
-            b1_rev_r2,
-            b2_rev_r2,
+            False if b1_fwd_r1 is None else True,
+            False if b2_fwd_r1 is None else True,
+            False if b1_rev_r1 is None else True,
+            False if b2_rev_r1 is None else True,
+            False if b1_fwd_r2 is None else True,
+            False if b2_fwd_r2 is None else True,
+            False if b1_rev_r2 is None else True,
+            False if b2_rev_r2 is None else True,
         )
-        print(ret)
         return ret
+
 
 class SingleDemultiplexStrategy(DemultiplexStrategy):
 
@@ -631,7 +631,7 @@ class PE_Decide_On_Start_End_Trim_Start_End(PairedDemultiplexStrategy):
             print("not discarded")
 
         return self.trim_fragment_to_length(fragment)
-    
+
 
 class PE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
     """Just Trim the reads"""
@@ -667,3 +667,85 @@ class PE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
             fragment.Read2, len(fragment.Read2.Sequence) - self.r2_trim_end
         )
         return fragment
+
+
+class PE_Decide_On_Start_End_Trim_Start_End_Force_Barcode_at_Front(
+    PE_Decide_On_Start_End_Trim_Start_End
+):
+    """
+    The start barcode and end barcode are is relevant, but the start barcode
+    must be at the front of the read. In addition, it forces barcode locations at the
+    beginning, but allows for skipped first barcode bases, depending on the value
+    of min_overlap
+    """
+
+    def __init__(
+        self,
+        start_barcode: str,
+        end_barcode: str,
+        trim_after_start: int = 0,
+        trim_before_end: int = 0,
+        trim_length_r1: int = 0,
+        trim_length_r2: int = 0,
+        maximal_errors_start: int = 0,
+        maximal_errors_end: int = 0,
+        minimal_overlap_start: Optional[int] = None,
+        minimal_overlap_end: Optional[int] = None,
+        **kwargs
+    ):
+        super().__init__(
+            start_barcode=start_barcode,
+            end_barcode=end_barcode,
+            trim_after_start=trim_after_start,
+            trim_before_end=trim_before_end,
+            trim_length_r1=trim_length_r1,
+            trim_length_r2=trim_length_r2,
+            maximal_errors_start=maximal_errors_start,
+            maximal_errors_end=maximal_errors_end,
+            minimal_overlap_start=minimal_overlap_start,
+            minimal_overlap_end=minimal_overlap_end,
+            **kwargs
+        )
+
+    def _init_adapter(self) -> None:
+        # this is the start of the first read
+        print(self.start_barcode, self.maximal_errors_start, self.minimal_overlap_start)
+        self.adapter_start_forward = Adapter(
+            self.start_barcode,
+            maximal_number_of_errors=self.maximal_errors_start,
+            index_adapter_end=True,
+            minimal_overlap=self.minimal_overlap_start,
+            find_right_most_occurence=False,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
+        # this is the end of the first read
+        self.adapter_end_reverse = Adapter(
+            reverse_complement(self.end_barcode),
+            maximal_number_of_errors=self.maximal_errors_end,
+            index_adapter_end=False,
+            minimal_overlap=self.minimal_overlap_end,
+            find_right_most_occurence=True,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
+        # this is the start of the first read
+        self.adapter_end_forward = Adapter(
+            self.end_barcode,
+            maximal_number_of_errors=self.maximal_errors_end,
+            index_adapter_end=True,
+            minimal_overlap=self.minimal_overlap_end,
+            find_right_most_occurence=False,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
+        # this is the end of the second read
+        self.adapter_start_reverse = Adapter(
+            reverse_complement(self.start_barcode),
+            maximal_number_of_errors=self.maximal_errors_start,
+            index_adapter_end=False,
+            minimal_overlap=self.minimal_overlap_start,
+            find_right_most_occurence=True,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )

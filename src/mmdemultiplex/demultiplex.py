@@ -10,6 +10,7 @@ sequencing. Demultiplexing can Be defined on Forward barcodes, reverse barcodes
 and a combination of both (in case of paired end reads.
 """
 import pandas as pd
+
 # import pypipegraph as ppg
 from collections import Counter
 from pathlib import Path
@@ -97,7 +98,7 @@ class Demultiplexer:
         for key, df_1_row in self.barcode_df.iterrows():
             parameters = df_1_row.to_dict()
             self.decision_callbacks[key] = self.strategy(**parameters)
-        
+
     def get_fastq_iterator(self) -> Callable:
         return get_fastq_iterator(self.is_paired)
 
@@ -184,7 +185,7 @@ class Demultiplexer:
     def _check_on_barcode(self, fragment: "Fragment") -> Dict[Any, dict]:
         """
         For each barcode combination key, call locate_count and get occurences:
-   
+
              returns:
             { key: {
                 "b1_in_r1": bool,
@@ -204,10 +205,14 @@ class Demultiplexer:
         for key, cb in self.decision_callbacks.items():
             print(cb)
             (
-                b1_fwd_r1, b2_fwd_r1,
-                b1_rev_r1, b2_rev_r1,
-                b1_fwd_r2, b2_fwd_r2,
-                b1_rev_r2, b2_rev_r2,
+                b1_fwd_r1,
+                b2_fwd_r1,
+                b1_rev_r1,
+                b2_rev_r1,
+                b1_fwd_r2,
+                b2_fwd_r2,
+                b1_rev_r2,
+                b2_rev_r2,
             ) = cb.locate_count(fragment.copy())
 
             b1_in_r1 = b1_fwd_r1 or b1_rev_r1
@@ -237,12 +242,49 @@ class Demultiplexer:
 
         return result
 
+    def _check_all_barcode(self, fragment: "Fragment") -> Dict[Any, dict]:
+        """
+        For each barcode combination key, call locate_count and get occurences:
+
+             returns:
+
+        """
+        result: Dict[str, bool] = {}
+
+        for key, cb in self.decision_callbacks.items():
+            start_bc = getattr(cb, "start_barcode", "")
+            end_bc = getattr(cb, "end_barcode", "")
+            (
+                b1_fwd_r1,
+                b2_fwd_r1,
+                b1_rev_r1,
+                b2_rev_r1,
+                b1_fwd_r2,
+                b2_fwd_r2,
+                b1_rev_r2,
+                b2_rev_r2,
+            ) = cb.locate_count(fragment.copy())
+
+            b1_in_r1 = b1_fwd_r1 or b1_rev_r1
+            b1_in_r2 = b1_fwd_r2 or b1_rev_r2
+            b2_in_r1 = b2_fwd_r1 or b2_rev_r1
+            b2_in_r2 = b2_fwd_r2 or b2_rev_r2
+
+            b1_present = b1_in_r1 or b1_in_r2
+            b2_present = b2_in_r1 or b2_in_r2
+
+            if b1_present:
+                result[start_bc] = b1_present
+            if b2_present:
+                result[end_bc] = b2_present
+        return result
+
     def _check_adapters_callable(
         self,
         files_to_create: Iterable[Path],
         sentinel: Path,
     ) -> Callable:
-        
+
         def dump(
             outfiles: Iterable[Path],
             self=self,
@@ -257,7 +299,7 @@ class Demultiplexer:
                 key: Counter() for key in self.decision_callbacks
             }
 
-            # NEW: Co-Occurence-Counts 
+            # NEW: Co-Occurence-Counts
             barcode_pair_counts: Counter = Counter()
 
             global_total_fragments = 0
@@ -275,31 +317,31 @@ class Demultiplexer:
 
                         # get adapter info for each barcode combination
                         match_info = self._check_on_barcode(fragment)
-
                         # NEW: barcode-sequenz-sets per fragment         # <<< NEW
-                        present_b1 = set()                               # <<< NEW
-                        present_b2 = set()                               # <<< NEW
-                        for key, info in match_info.items():             # <<< NEW
-                            cb = self.decision_callbacks[key]            # <<< NEW
+                        present_b1 = set()  # <<< NEW
+                        present_b2 = set()  # <<< NEW
+                        for key, info in match_info.items():  # <<< NEW
+                            cb = self.decision_callbacks[key]  # <<< NEW
                             b1_seq = str(getattr(cb, "start_barcode", ""))  # <<< NEW
-                            b2_seq = str(getattr(cb, "end_barcode", ""))    # <<< NEW
-                            if info["b1_present"] and b1_seq:            # <<< NEW
-                                present_b1.add(b1_seq)                   # <<< NEW
-                            if info["b2_present"] and b2_seq:            # <<< NEW
-                                present_b2.add(b2_seq)                   # <<< NEW
-                        if present_b1 and present_b2:                    # <<< NEW
-                            for b1_seq in present_b1:                    # <<< NEW
-                                for b2_seq in present_b2:                # <<< NEW
-                                    barcode_pair_counts[(b1_seq, b2_seq)] += 1  # <<< NEW
+                            b2_seq = str(getattr(cb, "end_barcode", ""))  # <<< NEW
+                            if info["b1_present"] and b1_seq:  # <<< NEW
+                                present_b1.add(b1_seq)  # <<< NEW
+                            if info["b2_present"] and b2_seq:  # <<< NEW
+                                present_b2.add(b2_seq)  # <<< NEW
+                        for b1_seq in present_b1:  # <<< NEW
+                            for b2_seq in present_b2:  # <<< NEW
+                                barcode_pair_counts[(b1_seq, b2_seq)] += 1  # <<< NEW
 
                         # keys with at least one barcode
                         keys_with_any = [
-                            k for k, v in match_info.items()
+                            k
+                            for k, v in match_info.items()
                             if v["b1_present"] or v["b2_present"]
                         ]
                         # keys with both barcodes
                         keys_with_both = [
-                            k for k, v in match_info.items()
+                            k
+                            for k, v in match_info.items()
                             if v["b1_present"] and v["b2_present"]
                         ]
 
@@ -345,7 +387,9 @@ class Demultiplexer:
                                 stats["b2_reverse"] += 1
 
                             expected = info["b1_in_r1"] and info["b2_in_r2"]
-                            swapped = (info["b1_in_r2"] and info["b2_in_r1"]) and not expected
+                            swapped = (
+                                info["b1_in_r2"] and info["b2_in_r1"]
+                            ) and not expected
 
                             if expected:
                                 stats["expected"] += 1
@@ -433,21 +477,28 @@ class Demultiplexer:
                 df_matrix.to_csv(outfile_matrix, sep="\t", index=False)
 
                 # NEW: barcode-pair-co-occurence                          # <<< NEW
-                pair_rows = []                                            # <<< NEW
-                for (b1_seq, b2_seq), cnt in barcode_pair_counts.items(): # <<< NEW
-                    pair_rows.append(                                     # <<< NEW
-                        {                                                 # <<< NEW
-                            "start_barcode": b1_seq,                      # <<< NEW
-                            "end_barcode": b2_seq,                        # <<< NEW
-                            "both": int(cnt),                             # <<< NEW
-                        }                                                 # <<< NEW
-                    )                                                     # <<< NEW
-                df_pairs = pd.DataFrame(pair_rows)                        # <<< NEW
-                if df_pairs.empty:                                        # <<< NEW
-                    df_pairs = pd.DataFrame(                              # <<< NEW
+                pair_rows = []  # <<< NEW
+                for start_barcode in self.barcode_df[
+                    "start_barcode"
+                ].unique():  # <<< NEW
+                    for end_barcode in self.barcode_df[
+                        "end_barcode"
+                    ].unique():  # <<< NEW
+                        pair_rows.append(
+                            {
+                                "start_barcode": start_barcode,  # <<< NEW
+                                "end_barcode": end_barcode,  # <<< NEW
+                                "both": barcode_pair_counts[
+                                    (start_barcode, end_barcode)
+                                ],  # <<< NEW
+                            }
+                        )
+                df_pairs = pd.DataFrame(pair_rows)  # <<< NEW
+                if df_pairs.empty:
+                    df_pairs = pd.DataFrame(
                         columns=["start_barcode", "end_barcode", "both"]  # <<< NEW
-                    )                                                     # <<< NEW
-                df_pairs.to_csv(outfile_pairs, sep="\t", index=False)     # <<< NEW
+                    )
+                df_pairs.to_csv(outfile_pairs, sep="\t", index=False)  # <<< NEW
 
                 # global infos to sentinel
                 done.write(
@@ -462,8 +513,12 @@ class Demultiplexer:
     def check_adapters(self):
         deps = self.get_dependencies()
         outfile = self.output_folder / f"{self.name}_adapter_check.tsv"
-        outfile_matrix = self.output_folder / f"{self.name}_adapter_check_matrix_main.tsv"
-        outfile_pairs = self.output_folder / f"{self.name}_adapter_check_barcode_pairs.tsv"
+        outfile_matrix = (
+            self.output_folder / f"{self.name}_adapter_check_matrix_main.tsv"
+        )
+        outfile_pairs = (
+            self.output_folder / f"{self.name}_adapter_check_barcode_pairs.tsv"
+        )
 
         files_to_create = [outfile, outfile_matrix, outfile_pairs]
         sentinel = self.output_folder / "adapter_check.txt"
