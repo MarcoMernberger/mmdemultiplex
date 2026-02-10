@@ -52,7 +52,7 @@ class Demultiplexer:
         self.output_folder.mkdir(parents=True, exist_ok=True)
         self.input_sample = sample
         self.input_files = self.input_sample.get_aligner_input_filenames()
-        self.is_paired = self.input_sample.is_paired
+        self.is_paired = self.input_sample.output_is_paired
         if isinstance(self.input_files, Tuple):
             self.input_files = [self.input_files]
         elif isinstance(self.input_files, List) and isinstance(

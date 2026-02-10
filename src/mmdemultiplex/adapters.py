@@ -105,7 +105,6 @@ class Adapter:
             self.flags = FLAG_BARCODE_FRONT_SKIP_PREFIX
         else:
             self.exact_locate = self.exact_locate_anywhere
-        print("flags", self.flags)
         self.find_best_match = find_best_match
         self.cutadapt_caller = self.cutadapt_call_first
         if self.find_best_match:
@@ -178,7 +177,6 @@ class Adapter:
             sequuence, the number of mismatches and the error count.
         """
         alignment = self.cutadapt_caller(sequence)
-        print(AdapterMatch(*alignment) if alignment is not None else "no match found")
         if alignment is None:
             return None
         else:
