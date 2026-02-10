@@ -1,25 +1,30 @@
 # -*- coding: utf-8 -*-
-from pkg_resources import get_distribution, DistributionNotFound
-
 try:
-    # Change here if project is renamed and does not equal the package name
-    dist_name = __name__
-    __version__ = get_distribution(dist_name).version
-except DistributionNotFound:
+    # Py3.8+
+    from importlib.metadata import version, PackageNotFoundError
+except Exception:
+    # Fallback für ältere Pythons
+    from importlib_metadata import version, PackageNotFoundError  # type: ignore
+
+# Change here if project/distribution name differs from package name
+dist_name = __name__
+try:
+    __version__ = version(dist_name)
+except PackageNotFoundError:
     __version__ = "unknown"
 finally:
-    del get_distribution, DistributionNotFound
+    del version, PackageNotFoundError
 
 
 from .demultiplex import Demultiplexer
 from .trim import Trimmer
 from .strategies import (
-    PE_Decide_On_Start_Trim_Start_End,
+    PE_Decide_On_Start_Trim_Start_end,
     DemultiplexStrategy,
-    PE_Decide_On_Start_End_Trim_Start_End,
-    SE_Decide_On_Start_Trim_Start_End,
-    SE_Trim_On_Start_Trim_After_X_BP,
-    PE_Trim_On_Start_Trim_After_X_BP,
+    PE_Decide_On_Start_end_Trim_start_end,
+    SE_Decide_On_Start_Trim_start_end,
+    SE_Trim_On_Start_Trim_after_X_BP,
+    PE_Trim_On_Start_Trim_after_X_BP,
 )
 from .util import (
     Fragment,
