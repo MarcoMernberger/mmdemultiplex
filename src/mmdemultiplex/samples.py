@@ -60,7 +60,7 @@ class DemultiplexInputSample:
         if hasattr(self.input_strategy, "dependencies"):
             deps = self.input_strategy.dependencies
         else:
-            deps = [ppg.FileChecksumInvariant(f) for f in flat_input_filenames]
+            deps = [FileChecksumInvariant(f) for f in flat_input_filenames]
         self.input_filenames = input_filenames
         self.dependencies.extend(deps)
 

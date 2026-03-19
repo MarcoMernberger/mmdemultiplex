@@ -11,7 +11,7 @@ from mbf.align._common import BlockedFileAdaptor
 import tempfile
 import shutil
 import collections
-import mbf
+import gzip, bz2
 import re
 
 try:
@@ -85,6 +85,10 @@ class Fragment:
     def __str__(self):
         return f"{self.Read1}\n{self.Read2}\n"
 
+    @property
+    def Name(self) -> str:
+        return self.Read1.Name.split()[0]
+
 
 class TemporaryToPermanent:
     def __init__(self, permanent_file: Path):
@@ -152,7 +156,10 @@ def get_df_callable_for_demultiplexer(
     sample_col_name: str,
     trim_start_col_name: Optional[str] = None,
     trim_end_col_name: Optional[str] = None,
+    max_error_start: Optional[str] = None,
+    max_error_end: Optional[str] = None,
 ) -> DataFrame:
+
     def call():
         df = df_in.copy()
         df[fw_col_name].fillna("", inplace=True)
@@ -165,36 +172,37 @@ def get_df_callable_for_demultiplexer(
         assert len((df[fw_col_name] + df[rv_col_name]).unique()) == len(
             df
         )  # check if the barcodes are unique
-        df["key"] = df[sample_col_name].str.replace(whitespace, "_")
+        df["key"] = df[sample_col_name].str.replace(whitespace, "_", regex=True)
         df = df.set_index("key")
-
-        if trim_start_col_name is None and trim_end_col_name is None:
-            df = df.rename(
-                columns={
-                    fw_col_name: "start_barcode",
-                    rv_col_name: "end_barcode",
-                }
-            )
-            return df[["start_barcode", "end_barcode"]]
-
-        else:
-            df = df.rename(
-                columns={
-                    fw_col_name: "start_barcode",
-                    rv_col_name: "end_barcode",
-                    trim_start_col_name: "trim_after_start",
-                    trim_end_col_name: "trim_before_end",
-                }
-            )
-            return df[
-                ["start_barcode", "end_barcode", "trim_after_start", "trim_before_end"]
-            ]
+        df = df.rename(
+            columns={
+                fw_col_name: "start_barcode",
+                rv_col_name: "end_barcode",
+                trim_start_col_name: "trim_after_start",
+                trim_end_col_name: "trim_before_end",
+                max_error_start: "maximal_errors_start",
+                max_error_end: "maximal_errors_end",
+            }
+        )
+        return df
 
     return call
 
 
+def _open_auto(filename: str):
+    if filename.endswith(".gz"):
+        return gzip.open(filename, "rb")
+    if filename.endswith(".bz2"):
+        return bz2.open(filename, "rb")
+    return open(filename, "rb", buffering=4 * 1024 * 1024)  # großer Buffer
+
+
 def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
     op = BlockedFileAdaptor(filename)
+<<<<<<< HEAD
+=======
+    # op = _open_auto(filename)
+>>>>>>> 878ee62938bb25c220b5917e0b042348d44b606f
     while True:
         try:
             name = op.readline()[1:-1].decode()
@@ -247,3 +255,32 @@ def create_fragment(sequences, qualities=None, names=None):
     ]
     fragment = Fragment(*reads)
     return fragment
+
+
+def dump_matching_reads(
+    incoming_reads_file: Path,
+    outfile: Path,
+    r1: Path,
+    r2: Path = None,
+    max_reads: Optional[int] = None,
+):
+    if max_reads is None:
+        maxc = inf
+    else:
+        maxc = max_reads
+    if r2 is None:
+        iterator = get_fastq_iterator(False)
+    else:
+        iterator = get_fastq_iterator(True)
+    with incoming_reads_file.open("r") as inp:
+        list_of_reads = dict.fromkeys([x.split()[0][1:] for x in inp.readlines()], "")
+        with outfile.open("w") as op:
+            counter = 0
+            for fragment in iterator((r1, r2)):
+                if fragment.Name in list_of_reads:
+                    op.write(
+                        f"{fragment.Name}\n{'_'.join([r.Sequence for r in fragment.reads])}\n"
+                    )
+                    counter += 1
+                if counter >= maxc:
+                    break

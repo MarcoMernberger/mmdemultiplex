@@ -3,7 +3,7 @@
 
 """adapters.py: Contains adapter classes and an interface to cutadapt."""
 
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, Literal
 import cutadapt
 import cutadapt.align
 import collections
@@ -34,6 +34,8 @@ AdapterMatch = collections.namedtuple(
 WHERE_START = 11  # WHERE_START should be start_in_reference & start_in_query & stop_in_query = 0b1011 = 11, that means we can get adapters within the reference, but the start must be present
 WHERE_END = 14  # WHERE_END should be stop_in_reference & start_in_query & stop_in_query = 0b1110 = 14, that means we can get adapters within the reference, but the end must be present
 WHERE_SEMIGLOBAL = 15
+BARCODE_ANYWHERE_IN_READ = 10
+FLAG_BARCODE_FRONT_SKIP_PREFIX = 9
 # WHERE_START = (
 #     cutadapt.align.START_WITHIN_SEQ1  # you need this, if you don't want partial matches with the adapter start at the end
 #     | cutadapt.align.START_WITHIN_SEQ2
@@ -62,6 +64,7 @@ class Adapter:
         minimal_overlap: Optional[int] = None,
         find_right_most_occurence: bool = False,
         find_best_match: bool = True,
+        require_adapter_at_start: Literal[True, "full", False] = False,
     ):
         """
         This is a wrapper class for cutadapt.Aligner.
@@ -84,6 +87,10 @@ class Adapter:
             Is the sequence of interest before or after the adapter_sequence, by default True.
         minimal_overlap : int, optional
             Minimal overlap for partial adapter occurences, by default adapter length.
+        find_right_most_occurence : bool, optional
+            If True, the rightmost occurence of the adapter is returned, otherwise the leftmost, by default False.
+        find_best_match : bool, optional
+            If True, the best match is returned, otherwise the first match, by default True.
         """
         self.adapter_sequence = adapter_sequence
         self.adapter_sequence_length = len(adapter_sequence)
@@ -91,7 +98,13 @@ class Adapter:
         self.orient_read = lambda x: x
         self.factor = 1
         self.index_adapter_end = index_adapter_end
-        self.flags = WHERE_START  # this might be wrong
+        self.flags = BARCODE_ANYWHERE_IN_READ  # WHERE_START  # this might be wrong
+        self.require_adapter_at_start = require_adapter_at_start
+        if self.require_adapter_at_start:
+            self.exact_locate = self.exact_locate_start
+            self.flags = FLAG_BARCODE_FRONT_SKIP_PREFIX
+        else:
+            self.exact_locate = self.exact_locate_anywhere
         self.find_best_match = find_best_match
         self.cutadapt_caller = self.cutadapt_call_first
         if self.find_best_match:
@@ -117,12 +130,20 @@ class Adapter:
                 self.error_rate = self.maximal_number_of_errors / float(
                     self.minimal_overlap
                 )
-                self.adapter = cutadapt.align.Aligner(
-                    reference=self.adapter_sequence,
-                    max_error_rate=self.error_rate,
-                    flags=self.flags,
-                    min_overlap=self.minimal_overlap,
-                )
+                if require_adapter_at_start == "full":
+                    self.adapter = cutadapt.align.PrefixComparer(
+                        reference=self.adapter_sequence,
+                        max_error_rate=self.error_rate,
+                        min_overlap=self.minimal_overlap,
+                    )
+                    print("flags are ignored for prefix comparer, using ", self.adapter)
+                else:
+                    self.adapter = cutadapt.align.Aligner(
+                        reference=self.adapter_sequence,
+                        max_error_rate=self.error_rate,
+                        flags=self.flags,
+                        min_overlap=self.minimal_overlap,
+                    )
             if self.index_adapter_end:
                 self.correct_for_adapter_location = (
                     lambda pos: self.adapter_sequence_length + pos
@@ -230,7 +251,7 @@ class Adapter:
             current = self.adapter.locate(sequence)
         return best_alignment
 
-    def exact_locate(self, sequence: str) -> Union[int, None]:
+    def exact_locate_anywhere(self, sequence: str) -> Union[int, None]:
         sequence = self.orient_read(sequence)
         pos = sequence.find(self.adapter_sequence)  # find the exact sequence is faster
         if pos >= 0:
@@ -238,6 +259,13 @@ class Adapter:
         else:
             ret = None
         return ret
+
+    def exact_locate_start(self, sequence: str) -> Union[int, None]:
+        sequence = self.orient_read(sequence)
+        if self.adapter_sequence == sequence[: self.adapter_sequence_length]:
+            return self.correct_for_adapter_location(0) * self.factor
+        else:
+            return None
 
     def cutadapt_locate(self, sequence: str) -> Union[int, None]:
         """
@@ -263,6 +291,7 @@ class Adapter:
             If no adapter is located, return False.
         """
         ret = self.exact_locate(sequence)
+        print("found exact match at position", ret)
         if ret is None:
             optpos = self.cutadapt_match(sequence)
             if optpos is not None:
@@ -275,4 +304,4 @@ class Adapter:
         return 0
 
     def __str__(self):
-        return f"Adapter: {self.adapter_sequence}, errors: {self.maximal_number_of_errors}, overlap: {self.minimal_overlap}, index_adapter_end: {self.index_adapter_end}, find_right_most_occurence: {self.find_right_most}"
+        return f"Adapter: {self.adapter_sequence}, errors: {self.maximal_number_of_errors}, overlap: {self.minimal_overlap}, index_adapter_end: {self.index_adapter_end}, find_right_most_occurence: {self.find_right_most}, flags: {self.flags}, require_adapter_at_start: {self.require_adapter_at_start}, find_best_match: {self.find_best_match}"

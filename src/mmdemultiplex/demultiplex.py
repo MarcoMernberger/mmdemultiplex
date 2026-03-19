@@ -9,15 +9,22 @@ sequences after the detected barcode. Can be applied to single end paired end
 sequencing. Demultiplexing can Be defined on Forward barcodes, reverse barcodes
 and a combination of both (in case of paired end reads.
 """
-import mbf
-import pypipegraph as ppg
+import pandas as pd
+
+# import pypipegraph as ppg
 from collections import Counter
 from pathlib import Path
-from typing import Callable, List, Dict, Tuple, Optional
+from typing import Callable, List, Dict, Tuple, Optional, Any, Iterable
 from mbf.align import Sample
+from mbf.align.fastq import Straight
 from .strategies import DemultiplexStrategy, PE_Decide_On_Start_Trim_Start_End
 from .util import Fragment, get_fastq_iterator, TemporaryToPermanent, len_callback
-from pypipegraph import Job
+from pypipegraph import (
+    Job,
+    MultiFileGeneratingJob,
+    FileGeneratingJob,
+    ParameterInvariant,
+)
 from .samples import FASTQsFromJobSelect
 from mbf.align.fastq import NoSpotCeck
 
@@ -47,7 +54,7 @@ class Demultiplexer:
         self.output_folder.mkdir(parents=True, exist_ok=True)
         self.input_sample = sample
         self.input_files = self.input_sample.get_aligner_input_filenames()
-        self.is_paired = self.input_sample.is_paired
+        self.is_paired = self.input_sample.output_is_paired
         if isinstance(self.input_files, Tuple):
             self.input_files = [self.input_files]
         elif isinstance(self.input_files, List) and isinstance(
@@ -71,7 +78,7 @@ class Demultiplexer:
 
     def get_dependencies(self) -> List[Job]:
         deps = [
-            ppg.ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
+            ParameterInvariant(self.name + "_demultiplex_params", self.parameters),
         ]
         if hasattr(self.input_sample, "prepare_input"):
             deps.append(self.input_sample.prepare_input())
@@ -99,7 +106,7 @@ class Demultiplexer:
 
     def _decide_on_barcode(self, fragment: Fragment):
         for key in self.decision_callbacks:
-            accepted = self.decision_callbacks[key].match_and_trim(fragment)
+            accepted = self.decision_callbacks[key].match_and_trim(fragment.copy())
             if accepted:
                 return key, accepted
         return "discarded", fragment
@@ -114,6 +121,41 @@ class Demultiplexer:
     ) -> None:
         for i, read in enumerate(fragment):
             file_handles[i].write(f"@{read.Name}\n{read.Sequence}\n+\n{read.Quality}\n")
+
+    def _do_demultiplex_callable(
+        self, files_to_create: Dict[str, Path], sentinel: Path
+    ):
+
+        def dump(
+            filenames, self=self, sentinel=sentinel, files_to_create=files_to_create
+        ):
+            # open a bunch of temporary files to write to
+            counter = Counter()
+            with sentinel.open("w") as done:
+                temporary_files = {}
+                done.write(self.parameter_string())
+                for sample_name in files_to_create:
+                    temporary_files[sample_name] = [
+                        TemporaryToPermanent(f).open("w")
+                        for f in files_to_create[sample_name]
+                    ]
+                # iterate over the input files and decide on each fragment, then write to temporary file
+                read_iterator = self.get_fastq_iterator()
+                for files_tuple in self.input_files:
+                    for fragment in read_iterator(files_tuple):
+                        key, accepted = self._decide_for_fragment(fragment)
+                        sample_name = f"{self.name}_{key}"
+                        counter[sample_name] += 1
+                        self.__write_fragment(accepted, temporary_files[sample_name])
+                # close open file handle
+                done.write("\nKey\tCount\n")
+                for key in temporary_files:
+                    done.write(f"{key}\t{counter[key]}\n")
+                    for f in temporary_files[key]:
+                        f.close()
+                done.write("\ndemultiplexing done")
+
+        return dump
 
     def do_demultiplex(self):
         deps = self.get_dependencies()
@@ -136,32 +178,358 @@ class Demultiplexer:
             filename for files in files_to_create.values() for filename in files
         ]
 
-        def dump():
-            # open a bunch of temporary files to write to
+        return MultiFileGeneratingJob(
+            filenames,
+            self._do_demultiplex_callable(files_to_create, sentinel),
+            empty_ok=True,
+        ).depends_on(deps)
+
+    def _check_on_barcode(self, fragment: "Fragment") -> Dict[Any, dict]:
+        """
+        For each barcode combination key, call locate_count and get occurences:
+
+             returns:
+            { key: {
+                "b1_in_r1": bool,
+                "b1_in_r2": bool,
+                "b2_in_r1": bool,
+                "b2_in_r2": bool,
+                "b1_fwd_r1": bool, "b1_rev_r1": bool,
+                "b1_fwd_r2": bool, "b1_rev_r2": bool,
+                "b2_fwd_r1": bool, "b2_rev_r1": bool,
+                "b2_fwd_r2": bool, "b2_rev_r2": bool,
+                "b1_present": bool,
+                "b2_present": bool,
+            }, ... }
+        """
+        result: Dict[Any, dict] = {}
+
+        for key, cb in self.decision_callbacks.items():
+            print(cb)
+            (
+                b1_fwd_r1,
+                b2_fwd_r1,
+                b1_rev_r1,
+                b2_rev_r1,
+                b1_fwd_r2,
+                b2_fwd_r2,
+                b1_rev_r2,
+                b2_rev_r2,
+            ) = cb.locate_count(fragment.copy())
+
+            b1_in_r1 = b1_fwd_r1 or b1_rev_r1
+            b1_in_r2 = b1_fwd_r2 or b1_rev_r2
+            b2_in_r1 = b2_fwd_r1 or b2_rev_r1
+            b2_in_r2 = b2_fwd_r2 or b2_rev_r2
+
+            b1_present = b1_in_r1 or b1_in_r2
+            b2_present = b2_in_r1 or b2_in_r2
+
+            result[key] = {
+                "b1_in_r1": b1_in_r1,
+                "b1_in_r2": b1_in_r2,
+                "b2_in_r1": b2_in_r1,
+                "b2_in_r2": b2_in_r2,
+                "b1_fwd_r1": b1_fwd_r1,
+                "b1_rev_r1": b1_rev_r1,
+                "b1_fwd_r2": b1_fwd_r2,
+                "b1_rev_r2": b1_rev_r2,
+                "b2_fwd_r1": b2_fwd_r1,
+                "b2_rev_r1": b2_rev_r1,
+                "b2_fwd_r2": b2_fwd_r2,
+                "b2_rev_r2": b2_rev_r2,
+                "b1_present": b1_present,
+                "b2_present": b2_present,
+            }
+
+        return result
+
+    def _check_all_barcode(self, fragment: "Fragment") -> Dict[Any, dict]:
+        """
+        For each barcode combination key, call locate_count and get occurences:
+
+             returns:
+
+        """
+        result: Dict[str, bool] = {}
+
+        for key, cb in self.decision_callbacks.items():
+            start_bc = getattr(cb, "start_barcode", "")
+            end_bc = getattr(cb, "end_barcode", "")
+            (
+                b1_fwd_r1,
+                b2_fwd_r1,
+                b1_rev_r1,
+                b2_rev_r1,
+                b1_fwd_r2,
+                b2_fwd_r2,
+                b1_rev_r2,
+                b2_rev_r2,
+            ) = cb.locate_count(fragment.copy())
+
+            b1_in_r1 = b1_fwd_r1 or b1_rev_r1
+            b1_in_r2 = b1_fwd_r2 or b1_rev_r2
+            b2_in_r1 = b2_fwd_r1 or b2_rev_r1
+            b2_in_r2 = b2_fwd_r2 or b2_rev_r2
+
+            b1_present = b1_in_r1 or b1_in_r2
+            b2_present = b2_in_r1 or b2_in_r2
+
+            if b1_present:
+                result[start_bc] = b1_present
+            if b2_present:
+                result[end_bc] = b2_present
+        return result
+
+    def _check_adapters_callable(
+        self,
+        files_to_create: Iterable[Path],
+        sentinel: Path,
+    ) -> Callable:
+
+        def dump(
+            outfiles: Iterable[Path],
+            self=self,
+            sentinel=sentinel,
+            files_to_create=files_to_create,
+        ):
+            # order as in check_adapters()
+            outfile, outfile_matrix, outfile_pairs = outfiles
+
+            # Counter per barcode combination
+            adapter_counts: Dict[Any, Counter] = {
+                key: Counter() for key in self.decision_callbacks
+            }
+
+            # NEW: Co-Occurence-Counts
+            barcode_pair_counts: Counter = Counter()
+
+            global_total_fragments = 0
+            global_unassigned_fragments = 0
+            global_ambiguous_pairs = 0
+
             with sentinel.open("w") as done:
-                temporary_files = {}
                 done.write(self.parameter_string())
-                for sample_name in files_to_create:
-                    temporary_files[sample_name] = [
-                        TemporaryToPermanent(f).open("w")
-                        for f in files_to_create[sample_name]
-                    ]
-                # iterate over the input files and decide on each fragment, then write to temporary file
+
                 read_iterator = self.get_fastq_iterator()
+
                 for files_tuple in self.input_files:
                     for fragment in read_iterator(files_tuple):
-                        key, accepted = self._decide_for_fragment(fragment)
-                        sample_name = f"{self.name}_{key}"
-                        self.__write_fragment(accepted, temporary_files[sample_name])
-                # close open file handle
-                for key in temporary_files:
-                    for f in temporary_files[key]:
-                        f.close()
-                done.write("\ndemultiplexing done")
+                        global_total_fragments += 1
 
-        return ppg.MultiFileGeneratingJob(filenames, dump, empty_ok=True).depends_on(
-            deps
+                        # get adapter info for each barcode combination
+                        match_info = self._check_on_barcode(fragment)
+                        # NEW: barcode-sequenz-sets per fragment         # <<< NEW
+                        present_b1 = set()  # <<< NEW
+                        present_b2 = set()  # <<< NEW
+                        for key, info in match_info.items():  # <<< NEW
+                            cb = self.decision_callbacks[key]  # <<< NEW
+                            b1_seq = str(getattr(cb, "start_barcode", ""))  # <<< NEW
+                            b2_seq = str(getattr(cb, "end_barcode", ""))  # <<< NEW
+                            if info["b1_present"] and b1_seq:  # <<< NEW
+                                present_b1.add(b1_seq)  # <<< NEW
+                            if info["b2_present"] and b2_seq:  # <<< NEW
+                                present_b2.add(b2_seq)  # <<< NEW
+                        for b1_seq in present_b1:  # <<< NEW
+                            for b2_seq in present_b2:  # <<< NEW
+                                barcode_pair_counts[(b1_seq, b2_seq)] += 1  # <<< NEW
+
+                        # keys with at least one barcode
+                        keys_with_any = [
+                            k
+                            for k, v in match_info.items()
+                            if v["b1_present"] or v["b2_present"]
+                        ]
+                        # keys with both barcodes
+                        keys_with_both = [
+                            k
+                            for k, v in match_info.items()
+                            if v["b1_present"] and v["b2_present"]
+                        ]
+
+                        if not keys_with_any:
+                            # completely unassignable globally, plus none for all keys
+                            global_unassigned_fragments += 1
+                            for key in adapter_counts:
+                                adapter_counts[key]["none"] += 1
+                            continue
+
+                        if len(keys_with_both) > 1:
+                            # aAmbiguous, different barcode keys possible
+                            global_ambiguous_pairs += 1
+                            continue
+
+                        if len(keys_with_both) == 1:
+                            # unique pair (B1 & B2)
+                            key = keys_with_both[0]
+                            info = match_info[key]
+                            stats = adapter_counts[key]
+
+                            stats["any"] += 1
+                            stats["both"] += 1
+
+                            # positional infos
+                            if info["b1_in_r1"]:
+                                stats["b1_in_r1"] += 1
+                            if info["b1_in_r2"]:
+                                stats["b1_in_r2"] += 1
+                            if info["b2_in_r1"]:
+                                stats["b2_in_r1"] += 1
+                            if info["b2_in_r2"]:
+                                stats["b2_in_r2"] += 1
+
+                            # strand info
+                            if info["b1_fwd_r1"] or info["b1_fwd_r2"]:
+                                stats["b1_forward"] += 1
+                            if info["b1_rev_r1"] or info["b1_rev_r2"]:
+                                stats["b1_reverse"] += 1
+                            if info["b2_fwd_r1"] or info["b2_fwd_r2"]:
+                                stats["b2_forward"] += 1
+                            if info["b2_rev_r1"] or info["b2_rev_r2"]:
+                                stats["b2_reverse"] += 1
+
+                            expected = info["b1_in_r1"] and info["b2_in_r2"]
+                            swapped = (
+                                info["b1_in_r2"] and info["b2_in_r1"]
+                            ) and not expected
+
+                            if expected:
+                                stats["expected"] += 1
+                            elif swapped:
+                                stats["swapped"] += 1
+                            else:
+                                stats["other_orientation"] += 1
+
+                        else:
+                            # no keys_with_both, but there are keys_with_any
+                            # So we have single barcodes present (b1_only / b2_only)
+                            # fragments here are counted mutliple times!
+                            for key in keys_with_any:
+                                v = match_info[key]
+                                stats = adapter_counts[key]
+                                stats["any"] += 1
+
+                                if v["b1_present"] and not v["b2_present"]:
+                                    stats["b1_only"] += 1
+                                elif v["b2_present"] and not v["b1_present"]:
+                                    stats["b2_only"] += 1
+                                else:
+                                    # bot be true (should not happen)
+                                    stats["other_orientation"] += 1
+
+                # output metrics per barcode combination key
+                detail_metrics = [
+                    "any",
+                    "both",
+                    "b1_only",
+                    "b2_only",
+                    "none",
+                    "b1_in_r1",
+                    "b1_in_r2",
+                    "b2_in_r1",
+                    "b2_in_r2",
+                    "b1_forward",
+                    "b1_reverse",
+                    "b2_forward",
+                    "b2_reverse",
+                    "expected",
+                    "swapped",
+                    "other_orientation",
+                ]
+
+                rows = []
+                for key, stats in adapter_counts.items():
+                    cb = self.decision_callbacks[key]
+                    start_bc = getattr(cb, "start_barcode", "")
+                    end_bc = getattr(cb, "end_barcode", "")
+
+                    row = {
+                        "sample_name": str(key),
+                        "start_barcode": str(start_bc),
+                        "end_barcode": str(end_bc),
+                    }
+                    for m in detail_metrics:
+                        row[m] = int(stats.get(m, 0))
+                    rows.append(row)
+
+                df_detail = pd.DataFrame(rows)
+
+                # force column order
+                df_detail = df_detail[
+                    ["sample_name", "start_barcode", "end_barcode"] + detail_metrics
+                ]
+
+                # detailed tsv
+                df_detail.to_csv(outfile, sep="\t", index=False)
+
+                # matrix file to indicate the number of combinations
+                matrix_metrics = [
+                    "any",
+                    "both",
+                    "b1_only",
+                    "b2_only",
+                    "none",
+                    "expected",
+                    "swapped",
+                    "other_orientation",
+                ]
+                df_matrix = df_detail[
+                    ["sample_name", "start_barcode", "end_barcode"] + matrix_metrics
+                ]
+                df_matrix.to_csv(outfile_matrix, sep="\t", index=False)
+
+                # NEW: barcode-pair-co-occurence                          # <<< NEW
+                pair_rows = []  # <<< NEW
+                for start_barcode in self.barcode_df[
+                    "start_barcode"
+                ].unique():  # <<< NEW
+                    for end_barcode in self.barcode_df[
+                        "end_barcode"
+                    ].unique():  # <<< NEW
+                        pair_rows.append(
+                            {
+                                "start_barcode": start_barcode,  # <<< NEW
+                                "end_barcode": end_barcode,  # <<< NEW
+                                "both": barcode_pair_counts[
+                                    (start_barcode, end_barcode)
+                                ],  # <<< NEW
+                            }
+                        )
+                df_pairs = pd.DataFrame(pair_rows)  # <<< NEW
+                if df_pairs.empty:
+                    df_pairs = pd.DataFrame(
+                        columns=["start_barcode", "end_barcode", "both"]  # <<< NEW
+                    )
+                df_pairs.to_csv(outfile_pairs, sep="\t", index=False)  # <<< NEW
+
+                # global infos to sentinel
+                done.write(
+                    f"\nTotal fragments: {global_total_fragments}\n"
+                    f"Unassigned fragments (no barcode for any key): {global_unassigned_fragments}\n"
+                    f"Ambiguous fragments (multiple barcode pairs with both indices): {global_ambiguous_pairs}\n"
+                )
+                done.write("Check complete.")
+
+        return dump
+
+    def check_adapters(self):
+        deps = self.get_dependencies()
+        outfile = self.output_folder / f"{self.name}_adapter_check.tsv"
+        outfile_matrix = (
+            self.output_folder / f"{self.name}_adapter_check_matrix_main.tsv"
         )
+        outfile_pairs = (
+            self.output_folder / f"{self.name}_adapter_check_barcode_pairs.tsv"
+        )
+
+        files_to_create = [outfile, outfile_matrix, outfile_pairs]
+        sentinel = self.output_folder / "adapter_check.txt"
+
+        return MultiFileGeneratingJob(
+            files_to_create,
+            self._check_adapters_callable(files_to_create, sentinel),
+            empty_ok=True,
+        ).depends_on(deps)
 
     def get_files_to_create(self):
         files_to_create = {}
@@ -191,7 +559,11 @@ class Demultiplexer:
                 sample_name,
                 input_strategy=FASTQsFromJobSelect(sample_name, self.do_demultiplex()),
                 reverse_reads=False,
+<<<<<<< HEAD
                 fastq_processor=NoSpotCeck(),
+=======
+                fastq_processor=Straight(),
+>>>>>>> 878ee62938bb25c220b5917e0b042348d44b606f
                 pairing=pairing,
                 vid=None,
             )
@@ -202,17 +574,13 @@ class Demultiplexer:
             self.raw_samples = self._make_samples()
         return self.raw_samples
 
-    def count_adapters(self, k: int = 10, most_common: Optional[int] = None):
+    def _count_adapters_callable(self, k: int = 10, most_common: Optional[int] = None):
         """
         count_adapters counts the starting kmers of the reads in the input files.
         This is to check the actual adapters/barcodes used for demultiplexing.
         """
-        deps = self.get_dependencies()
-        output_file = (
-            self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
-        )
 
-        def count():
+        def __count(output_file, self=self):
             read_iterator = self.get_fastq_iterator()
             counter = Counter()
             for files_tuple in self.input_files:
@@ -223,7 +591,43 @@ class Demultiplexer:
                 for count in counter.most_common(most_common):
                     outp.write(f"{count[0]}\t{count[1]}\n")
 
-        return ppg.FileGeneratingJob(output_file, count, empty_ok=True).depends_on(deps)
+        return __count
+
+    def count_adapters(self, k: int = 10, most_common: Optional[int] = None):
+        """
+        count_adapters counts the starting kmers of the reads in the input files.
+        This is to check the actual adapters/barcodes used for demultiplexing.
+        """
+        deps = self.get_dependencies()
+        output_file = (
+            self.output_folder / f"{self.input_sample.name}_barcode_counts.txt"
+        )
+        return FileGeneratingJob(
+            output_file, self._count_adapters_callable(k, most_common), empty_ok=True
+        ).depends_on(deps)
+
+    def _divide_reads_callable(
+        self,
+        decision_callback=len_callback,
+    ):
+        """
+        divide_reads counts the starting kmers of the reads in the input files.
+        This is to check the actual adapters/barcodes used for demultiplexing.
+        """
+
+        def __divide(outfiles, self=self, decision_callback=decision_callback):
+            outfiles[0].parent.mkdir(parents=True, exist_ok=True)
+            read_iterator = self.get_fastq_iterator()
+            temporary_files = [TemporaryToPermanent(f).open("w") for f in outfiles]
+            for files_tuple in input_files:
+                for fragment in read_iterator(files_tuple):
+                    fragment = decision_callback(fragment)
+                    self.__write_fragment(fragment, temporary_files)
+            # close open file handle
+            for f in temporary_files:
+                f.close()
+
+        return __divide
 
     def divide_reads(
         self,
@@ -237,25 +641,14 @@ class Demultiplexer:
         This is to check the actual adapters/barcodes used for demultiplexing.
         """
         deps = self.get_dependencies()
-        new_output_folder.mkdir(parents=True, exist_ok=True)
         outfiles = (
             new_output_folder / input_files[0][0].name,
             new_output_folder / input_files[0][1].name,
         )
-
-        def divide():
-            read_iterator = self.get_fastq_iterator()
-            temporary_files = [TemporaryToPermanent(f).open("w") for f in outfiles]
-            for files_tuple in input_files:
-                for fragment in read_iterator(files_tuple):
-                    fragment = decision_callback(fragment)
-                    self.__write_fragment(fragment, temporary_files)
-            # close open file handle
-            for f in temporary_files:
-                f.close()
-
         return (
-            ppg.MultiFileGeneratingJob(outfiles, divide, empty_ok=True)
+            MultiFileGeneratingJob(
+                outfiles, self._divide_reads_callable(decision_callback), empty_ok=True
+            )
             .depends_on(dependencies)
             .depends_on(deps)
         )

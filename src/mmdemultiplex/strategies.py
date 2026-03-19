@@ -4,7 +4,7 @@
 """strategies.py: Contains different demultiplexing strategies."""
 
 from abc import abstractmethod, ABC
-from typing import List, Union, Literal, Optional
+from typing import List, Union, Literal, Optional, Tuple
 from .util import Fragment, Read, reverse_complement
 from .adapters import Adapter
 
@@ -53,6 +53,47 @@ class DemultiplexStrategy(ABC):
                 read, trim_length
             )  # trim first read to specified length
         return read
+
+
+class PairedDemultiplexStrategy(DemultiplexStrategy):
+
+    def locate_count(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        "Returns None, if the fragment does not match and a position otherwise"
+        b1_fwd_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
+        b2_fwd_r1 = self.adapter_end_forward.locate(fragment.Read1.Sequence)
+        b1_rev_r1 = self.adapter_start_reverse.locate(fragment.Read1.Sequence)
+        b2_rev_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
+        b1_fwd_r2 = self.adapter_start_forward.locate(fragment.Read2.Sequence)
+        b2_fwd_r2 = self.adapter_end_forward.locate(fragment.Read2.Sequence)
+        b1_rev_r2 = self.adapter_start_reverse.locate(fragment.Read2.Sequence)
+        b2_rev_r2 = self.adapter_end_reverse.locate(fragment.Read2.Sequence)
+        ret = (
+            False if b1_fwd_r1 is None else True,
+            False if b2_fwd_r1 is None else True,
+            False if b1_rev_r1 is None else True,
+            False if b2_rev_r1 is None else True,
+            False if b1_fwd_r2 is None else True,
+            False if b2_fwd_r2 is None else True,
+            False if b1_rev_r2 is None else True,
+            False if b2_rev_r2 is None else True,
+        )
+        return ret
+
+
+class SingleDemultiplexStrategy(DemultiplexStrategy):
+
+    def locate_count(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        "Returns None, if the fragment does not match and a position otherwise"
+        b1_fwd_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
+        b2_fwd_r1 = self.adapter_end_forward.locate(fragment.Read1.Sequence)
+        b1_rev_r1 = self.adapter_start_reverse.locate(fragment.Read1.Sequence)
+        b2_rev_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
+        return [
+            b1_fwd_r1,
+            b2_fwd_r1,
+            b1_rev_r1,
+            b2_rev_r1,
+        ]
 
 
 class PE_Decide_On_Start_Trim_Start_End(DemultiplexStrategy):
@@ -456,7 +497,7 @@ class SE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
             return fragment
 
 
-class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
+class PE_Decide_On_Start_End_Trim_Start_End(PairedDemultiplexStrategy):
     """The start barcode and end barcode are is relevant"""
 
     def __init__(
@@ -540,6 +581,7 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
 
     def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
         "Returns None, if the fragment does not match and a trimmed fragment otherwise"
+
         start_in_r1 = self.adapter_start_forward.locate(fragment.Read1.Sequence)
         start_in_r2 = self.adapter_start_forward.locate(fragment.Read2.Sequence)
         if start_in_r1 is None and start_in_r2 is None:
@@ -571,6 +613,7 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
         )
         # accept fragment, both adapters are found
         # trim reverse adapters at the end of reads
+
         end_reverse_in_r1 = self.adapter_end_reverse.locate(fragment.Read1.Sequence)
         if end_reverse_in_r1 is not None:
             # that means there is something to trim and it will not leave an empty string (end_reverse_in_r1 == 0)
@@ -584,4 +627,125 @@ class PE_Decide_On_Start_End_Trim_Start_End(DemultiplexStrategy):
             )
         if len(fragment.Read2.Sequence) == 0 or len(fragment.Read1.Sequence) == 0:
             return False
+        if "M03491:45:000000000-GT86M:1:1101:14198:1505" in fragment.Read1.Name:
+            print("not discarded")
+
         return self.trim_fragment_to_length(fragment)
+
+
+class PE_Trim_On_Start_Trim_After_X_BP(DemultiplexStrategy):
+    """Just Trim the reads"""
+
+    def __init__(
+        self,
+        trim_r1: Tuple[int, int] = (0, 0),
+        trim_r2: Tuple[int, int] = (0, 0),
+    ):
+        self.r1_trim_start = trim_r1[0]
+        self.r2_trim_start = trim_r2[1]
+        self.r1_trim_end = trim_r1[0]
+        self.r2_trim_end = trim_r2[1]
+
+    def get_parameters(self) -> List:
+        return [
+            self.r1_trim_start,
+            self.r2_trim_start,
+            self.r1_trim_end,
+            self.r2_trim_end,
+        ]
+
+    def match_and_trim(self, fragment: Fragment) -> Union[Fragment, Literal[False]]:
+        "Returns None, if the fragment does not match and a trimmed fragment otherwise"
+        fragment.Read1 = self.trim_read_front(
+            fragment.Read1, self.r1_trim_start
+        )  # trim start adapter in first read
+        fragment.Read2 = self.trim_read_front(fragment.Read2, self.r2_trim_start)
+        fragment.Read1 = self.trim_read_back(
+            fragment.Read1, len(fragment.Read1.Sequence) - self.r1_trim_end
+        )
+        fragment.Read2 = self.trim_read_back(
+            fragment.Read2, len(fragment.Read2.Sequence) - self.r2_trim_end
+        )
+        return fragment
+
+
+class PE_Decide_On_Start_End_Trim_Start_End_Force_Barcode_at_Front(
+    PE_Decide_On_Start_End_Trim_Start_End
+):
+    """
+    The start barcode and end barcode are is relevant, but the start barcode
+    must be at the front of the read. In addition, it forces barcode locations at the
+    beginning, but allows for skipped first barcode bases, depending on the value
+    of min_overlap
+    """
+
+    def __init__(
+        self,
+        start_barcode: str,
+        end_barcode: str,
+        trim_after_start: int = 0,
+        trim_before_end: int = 0,
+        trim_length_r1: int = 0,
+        trim_length_r2: int = 0,
+        maximal_errors_start: int = 0,
+        maximal_errors_end: int = 0,
+        minimal_overlap_start: Optional[int] = None,
+        minimal_overlap_end: Optional[int] = None,
+        **kwargs
+    ):
+        super().__init__(
+            start_barcode=start_barcode,
+            end_barcode=end_barcode,
+            trim_after_start=trim_after_start,
+            trim_before_end=trim_before_end,
+            trim_length_r1=trim_length_r1,
+            trim_length_r2=trim_length_r2,
+            maximal_errors_start=maximal_errors_start,
+            maximal_errors_end=maximal_errors_end,
+            minimal_overlap_start=minimal_overlap_start,
+            minimal_overlap_end=minimal_overlap_end,
+            **kwargs
+        )
+
+    def _init_adapter(self) -> None:
+        # this is the start of the first read
+        print(self.start_barcode, self.maximal_errors_start, self.minimal_overlap_start)
+        self.adapter_start_forward = Adapter(
+            self.start_barcode,
+            maximal_number_of_errors=self.maximal_errors_start,
+            index_adapter_end=True,
+            minimal_overlap=self.minimal_overlap_start,
+            find_right_most_occurence=False,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
+        # this is the end of the first read
+        self.adapter_end_reverse = Adapter(
+            reverse_complement(self.end_barcode),
+            maximal_number_of_errors=self.maximal_errors_end,
+            index_adapter_end=False,
+            minimal_overlap=self.minimal_overlap_end,
+            find_right_most_occurence=True,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
+        # this is the start of the first read
+        self.adapter_end_forward = Adapter(
+            self.end_barcode,
+            maximal_number_of_errors=self.maximal_errors_end,
+            index_adapter_end=True,
+            minimal_overlap=self.minimal_overlap_end,
+            find_right_most_occurence=False,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
+        # this is the end of the second read
+        self.adapter_start_reverse = Adapter(
+            reverse_complement(self.start_barcode),
+            maximal_number_of_errors=self.maximal_errors_start,
+            index_adapter_end=False,
+            minimal_overlap=self.minimal_overlap_start,
+            find_right_most_occurence=True,
+            find_best_match=False,
+            require_adapter_at_start=True,
+        )
