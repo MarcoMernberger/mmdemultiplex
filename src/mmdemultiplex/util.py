@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, Callable, Tuple
 from pandas import DataFrame
 from dataclasses import dataclass, replace
+from mbf.align._common import BlockedFileAdaptor
 import tempfile
 import shutil
 import collections
@@ -193,7 +194,7 @@ def get_df_callable_for_demultiplexer(
 
 
 def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
-    op = mbf.align._common.BlockedFileAdaptor(filename)
+    op = BlockedFileAdaptor(filename)
     while True:
         try:
             name = op.readline()[1:-1].decode()
