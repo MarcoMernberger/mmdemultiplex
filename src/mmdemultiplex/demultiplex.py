@@ -559,11 +559,7 @@ class Demultiplexer:
                 sample_name,
                 input_strategy=FASTQsFromJobSelect(sample_name, self.do_demultiplex()),
                 reverse_reads=False,
-<<<<<<< HEAD
                 fastq_processor=NoSpotCeck(),
-=======
-                fastq_processor=Straight(),
->>>>>>> 878ee62938bb25c220b5917e0b042348d44b606f
                 pairing=pairing,
                 vid=None,
             )
