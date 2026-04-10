@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Callable, List, Dict, Tuple, Any, Union
 from mbf.align.strategies import _FASTQsBase
 from mbf.align.fastq import Straight
-from pypipegraph import Job
+from pypipegraph import Job, FileChecksumInvariant
 import pypipegraph as ppg
 
 __author__ = "Marco Mernberger"

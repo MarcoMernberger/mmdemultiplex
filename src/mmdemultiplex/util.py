@@ -199,10 +199,6 @@ def _open_auto(filename: str):
 
 def iterate_fastq(filename: str, reverse_reads: bool) -> Read:
     op = BlockedFileAdaptor(filename)
-<<<<<<< HEAD
-=======
-    # op = _open_auto(filename)
->>>>>>> 878ee62938bb25c220b5917e0b042348d44b606f
     while True:
         try:
             name = op.readline()[1:-1].decode()
